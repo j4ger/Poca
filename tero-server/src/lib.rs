@@ -51,6 +51,10 @@ impl<'a, T> DataHandle<'a, T>
 where
     T: Synchronizable,
 {
+    pub fn get_key(&self) -> &str {
+        &self.key
+    }
+
     pub fn set(&'a self, value: T) {
         let mut guard = self.data.write();
         *guard = value.clone_any_box();
@@ -86,7 +90,10 @@ pub trait SynchronizableClone {
     fn clone_any_box(&self) -> Box<dyn Any + Send + Sync>;
 }
 
-pub trait Synchronizable: 'static + Sync + Send + Debug + DynClone + SynchronizableClone {}
+pub trait Synchronizable: 'static + Sync + Send + Debug + DynClone + SynchronizableClone {
+    fn serialize(&self) -> String;
+    fn deserialize(&self, data: &str) -> Box<dyn Synchronizable>;
+}
 
 impl<T: 'static + Synchronizable + Clone> SynchronizableClone for T {
     fn clone_any_box(&self) -> Box<dyn Any + Send + Sync> {
@@ -94,7 +101,19 @@ impl<T: 'static + Synchronizable + Clone> SynchronizableClone for T {
     }
 }
 
-impl<T> Synchronizable for T where T: 'static + Sync + Send + Debug + Clone {}
+impl<T> Synchronizable for T
+where
+    T: 'static + Sync + Send + Debug + Clone + Serialize + DeserializeOwned,
+{
+    fn serialize(&self) -> String {
+        serde_json::to_string(self).unwrap()
+    }
+
+    fn deserialize(&self, data: &str) -> Box<dyn Synchronizable> {
+        let data: T = serde_json::from_str(data).unwrap();
+        Box::new(data)
+    }
+}
 
 dyn_clone::clone_trait_object!(Synchronizable);
 
