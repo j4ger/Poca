@@ -4,7 +4,12 @@ use futures_util::StreamExt;
 use parking_lot::{Mutex, RwLock};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
-    any::Any, collections::HashMap, fmt::Debug, marker::PhantomData, net::SocketAddr, ops::Deref,
+    any::Any,
+    collections::HashMap,
+    fmt::Debug,
+    marker::PhantomData,
+    net::{SocketAddr, ToSocketAddrs},
+    ops::Deref,
     sync::Arc,
 };
 use tokio::{
@@ -18,36 +23,41 @@ const CHANNEL_SIZE: usize = 32;
 type DataElement = Arc<RwLock<Box<dyn Any + Send + Sync>>>;
 type Store = Arc<Mutex<HashMap<String, DataElement>>>;
 
-type BroadcastSender<'a> = broadcast::Sender<Message<'a>>;
-type BroadcastReceiver<'a> = broadcast::Receiver<Message<'a>>;
+type BroadcastSender = broadcast::Sender<Message<'static>>;
+type BroadcastReceiver = broadcast::Receiver<Message<'static>>;
 
-pub struct Tero<'a> {
+pub struct Tero {
     state: ServerState,
     addr: SocketAddr,
     server_handle: Option<JoinHandle<()>>,
     handler_handles: Arc<Mutex<Vec<JoinHandle<()>>>>,
     store: Store,
-    broadcast: (BroadcastSender<'a>, BroadcastReceiver<'a>),
+    broadcast: (BroadcastSender, BroadcastReceiver),
 }
 
-pub struct DataHandle<'a, T: Synchronizable> {
+pub struct DataHandle<T: Synchronizable> {
     key: String,
-    sender: broadcast::Sender<Message<'a>>,
+    sender: broadcast::Sender<Message<'static>>,
     data_type: PhantomData<T>,
     data: DataElement,
 }
 
 pub trait DataToAny: 'static {
     fn as_any(&self) -> &dyn Any;
+    fn to_any(self) -> Box<dyn Any + Send + Sync>;
 }
 
-impl<T: 'static> DataToAny for T {
+impl<T: 'static + Send + Sync> DataToAny for T {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn to_any(self) -> Box<dyn Any + Send + Sync> {
+        Box::new(self)
+    }
 }
 
-impl<'a, T> DataHandle<'a, T>
+impl<T> DataHandle<T>
 where
     T: Synchronizable,
 {
@@ -55,7 +65,7 @@ where
         &self.key
     }
 
-    pub fn set(&'a self, value: T) {
+    pub fn set(&'static self, value: T) {
         let mut guard = self.data.write();
         *guard = value.clone_any_box();
         let request = Message::Set {
@@ -145,12 +155,27 @@ pub enum ServerState {
     Down,
 }
 
-impl Tero<'static> {
-    pub fn new(addr: SocketAddr) -> Tero<'static> {
+impl Tero {
+    pub fn data<T: Synchronizable>(&'static self, key: &str, data: T) -> DataHandle<T> {
+        let guard = self.store.lock();
+        if guard.contains_key(key) {
+            panic!("Key {} already exists", key);
+        }
+        let data = Arc::new(RwLock::new(data.to_any()));
+        let sender = self.broadcast.0.clone();
+        DataHandle {
+            key: key.to_string(),
+            sender,
+            data_type: PhantomData::<T>,
+            data,
+        }
+    }
+
+    pub fn new(addr: impl ToSocketAddrs) -> Tero {
         let channel = broadcast::channel(CHANNEL_SIZE);
         Tero {
             state: ServerState::Down,
-            addr,
+            addr: addr.to_socket_addrs().unwrap().next().unwrap(),
             server_handle: None,
             handler_handles: Arc::new(Mutex::new(Vec::new())),
             store: Arc::new(Mutex::new(HashMap::new())),
@@ -201,7 +226,7 @@ async fn websocket_handler<'a>(
     raw_stream: TcpStream,
     addr: SocketAddr,
     store: Store,
-    broadcast_rx: BroadcastReceiver<'a>,
+    broadcast_rx: BroadcastReceiver,
 ) -> () {
     println!("New connection from {}", addr);
 
