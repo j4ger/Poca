@@ -20,7 +20,7 @@ use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 const CHANNEL_SIZE: usize = 32;
 
-type DataElement = Arc<RwLock<Box<dyn Any + Send + Sync>>>;
+type DataElement = Arc<RwLock<Box<dyn Synchronizable>>>;
 type Store = Arc<Mutex<HashMap<String, DataElement>>>;
 
 type BroadcastSender = broadcast::Sender<Message>;
@@ -67,7 +67,7 @@ where
 
     pub fn set(&self, value: T) {
         let mut guard = self.data.write();
-        *guard = value.clone_any_box();
+        *guard = value.clone_synchronizable();
         let request = Message::Set {
             key: self.key.to_owned(),
             data: Box::new(value),
@@ -75,29 +75,15 @@ where
         self.sender.send(request).unwrap();
     }
 
-    pub fn execute<F, R>(&self, action: F) -> R
-    where
-        F: Fn(&T) -> R,
-    {
-        let guard = self.data.read();
-        let data = guard.deref().downcast_ref::<T>().unwrap();
-        action(data)
-    }
-
     pub fn get(&self) -> Box<T> {
         let guard = self.data.read();
-        guard
-            .deref()
-            .downcast_ref::<T>()
-            .unwrap()
-            .clone_any_box()
-            .downcast()
-            .unwrap()
+        guard.deref().deref().clone_any_box().downcast().unwrap()
     }
 }
 
 pub trait SynchronizableClone {
-    fn clone_any_box(&self) -> Box<dyn Any + Send + Sync>;
+    fn clone_any_box(&self) -> Box<dyn Any>;
+    fn clone_synchronizable(&self) -> Box<dyn Synchronizable>;
 }
 
 pub trait Synchronizable: 'static + Sync + Send + Debug + DynClone + SynchronizableClone {
@@ -106,7 +92,11 @@ pub trait Synchronizable: 'static + Sync + Send + Debug + DynClone + Synchroniza
 }
 
 impl<T: 'static + Synchronizable + Clone> SynchronizableClone for T {
-    fn clone_any_box(&self) -> Box<dyn Any + Send + Sync> {
+    fn clone_any_box(&self) -> Box<dyn Any> {
+        Box::new(self.clone())
+    }
+
+    fn clone_synchronizable(&self) -> Box<dyn Synchronizable> {
         Box::new(self.clone())
     }
 }
@@ -162,7 +152,7 @@ impl Tero {
         if guard.contains_key(key) {
             panic!("Key {} already exists", key);
         }
-        let data = Arc::new(RwLock::new(data.to_any()));
+        let data = Arc::new(RwLock::new(data.clone_synchronizable()));
         let sender = self.broadcast.0.clone();
         DataHandle {
             key: key.to_string(),
@@ -269,7 +259,13 @@ async fn websocket_handler<'a>(
             serde_json::from_str(message.into_text().unwrap().as_str()).unwrap();
         match message.message_type {
             WSMessageType::Set => {
-                todo!("handle set")
+                let key = message.key.unwrap();
+                let lock = store.lock();
+                let element = lock.get(&key).unwrap().deref();
+                let mut handle = element.deref().write();
+                let new_data = handle.deserialize(message.data.unwrap().as_str());
+                *handle = new_data;
+                //TODO: emit events
             }
             _ => {
                 todo!("handle other message types")
