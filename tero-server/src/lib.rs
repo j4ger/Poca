@@ -1,6 +1,5 @@
 use dyn_clone::DynClone;
-use futures_channel::oneshot;
-use futures_util::StreamExt;
+use futures_util::pin_mut;
 use parking_lot::{Mutex, RwLock};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -17,14 +16,15 @@ use tokio::{
     sync::broadcast,
     task::JoinHandle,
 };
+use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 const CHANNEL_SIZE: usize = 32;
 
 type DataElement = Arc<RwLock<Box<dyn Any + Send + Sync>>>;
 type Store = Arc<Mutex<HashMap<String, DataElement>>>;
 
-type BroadcastSender = broadcast::Sender<Message<'static>>;
-type BroadcastReceiver = broadcast::Receiver<Message<'static>>;
+type BroadcastSender = broadcast::Sender<Message>;
+type BroadcastReceiver = broadcast::Receiver<Message>;
 
 pub struct Tero {
     state: ServerState,
@@ -37,7 +37,7 @@ pub struct Tero {
 
 pub struct DataHandle<T: Synchronizable> {
     key: String,
-    sender: broadcast::Sender<Message<'static>>,
+    sender: broadcast::Sender<Message>,
     data_type: PhantomData<T>,
     data: DataElement,
 }
@@ -65,11 +65,11 @@ where
         &self.key
     }
 
-    pub fn set(&'static self, value: T) {
+    pub fn set(&self, value: T) {
         let mut guard = self.data.write();
         *guard = value.clone_any_box();
         let request = Message::Set {
-            key: &self.key,
+            key: self.key.to_owned(),
             data: Box::new(value),
         };
         self.sender.send(request).unwrap();
@@ -128,9 +128,9 @@ where
 dyn_clone::clone_trait_object!(Synchronizable);
 
 #[derive(Debug, Clone)]
-pub enum Message<'a> {
+pub enum Message {
     Set {
-        key: &'a str,
+        key: String,
         data: Box<dyn Synchronizable>,
     },
 }
@@ -140,13 +140,14 @@ pub enum WSMessageType {
     Set = 1,
     Emit = 2,
     Get = 3,
+    Error = 4,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WSMessage {
     message_type: WSMessageType,
-    key: String,
-    data: String,
+    key: Option<String>,
+    data: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -227,13 +228,60 @@ async fn websocket_handler<'a>(
     addr: SocketAddr,
     store: Store,
     broadcast_rx: BroadcastReceiver,
-) -> () {
+) {
     println!("New connection from {}", addr);
 
     let ws_stream = tokio_tungstenite::accept_async(raw_stream)
         .await
         .expect("Failed to accept websocket");
-    let (mut ws_sender, ws_receiver) = ws_stream.split();
+    let (ws_sender, ws_receiver) = futures_util::StreamExt::split(ws_stream);
 
     //TODO: deal with incoming messages
+
+    let broadcast_stream = BroadcastStream::from(broadcast_rx);
+    let broadcast_dealer = futures_util::StreamExt::forward(
+        broadcast_stream.filter_map(|message| {
+            match message {
+                Ok(inner) => match inner {
+                    Message::Set { key, data } => Some(Ok(tungstenite::Message::Text(
+                        serde_json::to_string(&WSMessage {
+                            message_type: WSMessageType::Set,
+                            key: Some(key.to_string()),
+                            data: Some(data.serialize()),
+                        })
+                        .unwrap(),
+                    ))),
+                },
+                Err(error) => {
+                    //TODO: uniformed logging
+                    println!("Error when receiving from broadcast channel: {}", error);
+                    None
+                }
+            }
+        }),
+        ws_sender,
+    );
+
+    let ws_dealer = futures_util::TryStreamExt::try_for_each(ws_receiver, |message| {
+        //TODO: actually do something
+        println!("{:?}", message);
+        let message: WSMessage =
+            serde_json::from_str(message.into_text().unwrap().as_str()).unwrap();
+        match message.message_type {
+            WSMessageType::Set => {
+                todo!("handle set")
+            }
+            _ => {
+                todo!("handle other message types")
+            }
+        }
+        futures_util::future::ok(())
+    });
+
+    pin_mut!(broadcast_dealer, ws_dealer);
+    //TODO: future::select on the dealers
+    tokio::select! {
+        _ = broadcast_dealer => {},
+        _ = ws_dealer => {},
+    }
 }
