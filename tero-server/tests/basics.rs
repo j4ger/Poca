@@ -3,6 +3,8 @@
 extern crate lazy_static;
 
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use serde::{Deserialize, Serialize};
     use tero_server::{DataHandle, Tero};
 
@@ -27,6 +29,7 @@ mod tests {
 
     #[test]
     fn setting_and_getting() {
+        HANDLE1.set(1);
         assert_eq!(*HANDLE1.get(), 1);
 
         HANDLE1.set(2);
@@ -56,5 +59,19 @@ mod tests {
                 test_bool: false
             }
         );
+    }
+
+    #[test]
+    fn on_change_handler() {
+        let watcher = Arc::new(Mutex::new(false));
+        let watcher_clone = watcher.clone();
+        HANDLE1.on_change(move |new_value| {
+            println!("{:?}", new_value);
+            let mut writer = watcher_clone.lock().unwrap();
+            *writer = true;
+        });
+
+        HANDLE1.set(3);
+        assert_eq!(*(watcher.lock().unwrap()), true);
     }
 }

@@ -8,7 +8,7 @@ use std::{
     fmt::Debug,
     marker::PhantomData,
     net::{SocketAddr, ToSocketAddrs},
-    ops::Deref,
+    ops::{Deref, DerefMut},
     sync::Arc,
 };
 use tokio::{
@@ -23,7 +23,7 @@ const CHANNEL_SIZE: usize = 32;
 // type DataElement = Arc<RwLock<Box<dyn Synchronizable>>>;
 struct DataElement {
     data: Arc<RwLock<Box<dyn Synchronizable>>>,
-    on_change: Arc<RwLock<Vec<Box<dyn EventHandler>>>>,
+    on_change: Arc<RwLock<Vec<Box<dyn FnMut() + Send + Sync>>>>,
 }
 type Store = Arc<Mutex<HashMap<String, DataElement>>>;
 
@@ -47,6 +47,7 @@ where
     sender: broadcast::Sender<Message>,
     data_type: PhantomData<T>,
     data_element: DataElement,
+    on_change: Arc<Mutex<Vec<Box<dyn FnMut(&T) + Send + Sync + 'static>>>>,
 }
 
 pub trait DataToAny: 'static {
@@ -75,6 +76,12 @@ where
     pub fn set(&self, value: T) {
         let mut guard = self.data_element.data.write();
         *guard = value.clone_synchronizable();
+        let dyn_value = value.clone_synchronizable();
+        let mut on_change = self.data_element.on_change.write();
+        for each in on_change.deref_mut() {
+            let handler = each.deref_mut();
+            handler.execute(&dyn_value);
+        }
         let request = Message::Set {
             key: self.key.to_owned(),
             data: Box::new(value),
@@ -87,37 +94,43 @@ where
         guard.deref().deref().clone_any_box().downcast().unwrap()
     }
 
-    pub fn on_change<F: EventHandler>(&self, handler: F) {
-        let new_handler = handler.as_event_handler();
+    pub fn on_change(&'static self, handler: impl FnMut(&T) -> () + Send + Sync + 'static) {
+        let boxed_handler = Box::new(handler);
+        let mut lock = self.on_change.lock();
+        let current_index = lock.len();
+        lock.push(boxed_handler);
+        let new_handler = move || {
+            let mut guard = self.on_change.lock();
+            let handler = guard.get_mut(current_index).unwrap();
+            let value = self.get();
+            (*handler)(&value);
+        };
+        let dyn_handler = Box::new(new_handler) as Box<dyn FnMut() + Send + Sync>;
         let mut guard = self.data_element.on_change.write();
-        guard.push(new_handler);
+        guard.push(dyn_handler);
     }
 }
 
 pub trait EventHandler: Send + Sync + 'static {
-    fn execute(&self, data: &Box<dyn Synchronizable>) -> ();
+    fn execute(&mut self, data: &Box<dyn Synchronizable>) -> ();
 }
 
 trait AsEventHandler {
     fn as_event_handler(self) -> Box<dyn EventHandler>;
 }
 
-impl<T> AsEventHandler for T
+impl<F> AsEventHandler for F
 where
-    T: EventHandler,
+    F: EventHandler,
 {
     fn as_event_handler(self) -> Box<dyn EventHandler> {
         Box::new(self)
     }
 }
 
-impl<T> EventHandler for dyn Fn(&Box<T>) -> () + Send + Sync
-where
-    T: Synchronizable,
-{
-    fn execute(&self, data: &Box<dyn Synchronizable>) -> () {
-        let data: Box<T> = data.clone_any_box().downcast().unwrap();
-        self(&data)
+impl EventHandler for dyn FnMut() + Send + Sync {
+    fn execute(&mut self, _data: &Box<dyn Synchronizable>) -> () {
+        self()
     }
 }
 
@@ -205,6 +218,7 @@ impl Tero {
             sender,
             data_type: PhantomData::<T>,
             data_element: data,
+            on_change: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -256,6 +270,12 @@ impl Tero {
             self.server_handle.take().unwrap().abort();
             self.state = ServerState::Down;
         }
+    }
+}
+
+impl Drop for Tero {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -311,13 +331,12 @@ async fn websocket_handler<'a>(
                 let element = element_lock.deref();
                 let mut handle = element.deref().data.write();
                 let new_data = handle.deserialize(message.data.unwrap().as_str());
-                let new_data_clone = new_data.clone();
                 *handle = new_data;
                 //TODO: emit events
-                let on_change = element.deref().on_change.read();
-                for each in on_change.deref() {
-                    let handler = each.deref();
-                    handler.execute(&new_data_clone);
+                let mut on_change = element.deref().on_change.write();
+                for each in on_change.deref_mut() {
+                    let handler = each.deref_mut();
+                    handler()
                 }
             }
             _ => {
