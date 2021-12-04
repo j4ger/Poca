@@ -20,7 +20,11 @@ use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
 const CHANNEL_SIZE: usize = 32;
 
-type DataElement = Arc<RwLock<Box<dyn Synchronizable>>>;
+// type DataElement = Arc<RwLock<Box<dyn Synchronizable>>>;
+struct DataElement {
+    data: Arc<RwLock<Box<dyn Synchronizable>>>,
+    on_change: Arc<RwLock<Vec<Box<dyn EventHandler>>>>,
+}
 type Store = Arc<Mutex<HashMap<String, DataElement>>>;
 
 type BroadcastSender = broadcast::Sender<Message>;
@@ -35,11 +39,14 @@ pub struct Tero {
     broadcast: (BroadcastSender, BroadcastReceiver),
 }
 
-pub struct DataHandle<T: Synchronizable> {
+pub struct DataHandle<T>
+where
+    T: Synchronizable,
+{
     key: String,
     sender: broadcast::Sender<Message>,
     data_type: PhantomData<T>,
-    data: DataElement,
+    data_element: DataElement,
 }
 
 pub trait DataToAny: 'static {
@@ -66,7 +73,7 @@ where
     }
 
     pub fn set(&self, value: T) {
-        let mut guard = self.data.write();
+        let mut guard = self.data_element.data.write();
         *guard = value.clone_synchronizable();
         let request = Message::Set {
             key: self.key.to_owned(),
@@ -76,8 +83,41 @@ where
     }
 
     pub fn get(&self) -> Box<T> {
-        let guard = self.data.read();
+        let guard = self.data_element.data.read();
         guard.deref().deref().clone_any_box().downcast().unwrap()
+    }
+
+    pub fn on_change<F: EventHandler>(&self, handler: F) {
+        let new_handler = handler.as_event_handler();
+        let mut guard = self.data_element.on_change.write();
+        guard.push(new_handler);
+    }
+}
+
+pub trait EventHandler: Send + Sync + 'static {
+    fn execute(&self, data: &Box<dyn Synchronizable>) -> ();
+}
+
+trait AsEventHandler {
+    fn as_event_handler(self) -> Box<dyn EventHandler>;
+}
+
+impl<T> AsEventHandler for T
+where
+    T: EventHandler,
+{
+    fn as_event_handler(self) -> Box<dyn EventHandler> {
+        Box::new(self)
+    }
+}
+
+impl<T> EventHandler for dyn Fn(&Box<T>) -> () + Send + Sync
+where
+    T: Synchronizable,
+{
+    fn execute(&self, data: &Box<dyn Synchronizable>) -> () {
+        let data: Box<T> = data.clone_any_box().downcast().unwrap();
+        self(&data)
     }
 }
 
@@ -91,7 +131,10 @@ pub trait Synchronizable: 'static + Sync + Send + Debug + DynClone + Synchroniza
     fn deserialize(&self, data: &str) -> Box<dyn Synchronizable>;
 }
 
-impl<T: 'static + Synchronizable + Clone> SynchronizableClone for T {
+impl<T> SynchronizableClone for T
+where
+    T: 'static + Synchronizable + Clone,
+{
     fn clone_any_box(&self) -> Box<dyn Any> {
         Box::new(self.clone())
     }
@@ -152,13 +195,16 @@ impl Tero {
         if guard.contains_key(key) {
             panic!("Key {} already exists", key);
         }
-        let data = Arc::new(RwLock::new(data.clone_synchronizable()));
+        let data = DataElement {
+            data: Arc::new(RwLock::new(data.clone_synchronizable())),
+            on_change: Arc::new(RwLock::new(Vec::new())),
+        };
         let sender = self.broadcast.0.clone();
         DataHandle {
             key: key.to_string(),
             sender,
             data_type: PhantomData::<T>,
-            data,
+            data_element: data,
         }
     }
 
@@ -260,12 +306,19 @@ async fn websocket_handler<'a>(
         match message.message_type {
             WSMessageType::Set => {
                 let key = message.key.unwrap();
-                let lock = store.lock();
-                let element = lock.get(&key).unwrap().deref();
-                let mut handle = element.deref().write();
+                let store_lock = store.lock();
+                let element_lock = store_lock.get(&key).unwrap();
+                let element = element_lock.deref();
+                let mut handle = element.deref().data.write();
                 let new_data = handle.deserialize(message.data.unwrap().as_str());
+                let new_data_clone = new_data.clone();
                 *handle = new_data;
                 //TODO: emit events
+                let on_change = element.deref().on_change.read();
+                for each in on_change.deref() {
+                    let handler = each.deref();
+                    handler.execute(&new_data_clone);
+                }
             }
             _ => {
                 todo!("handle other message types")
