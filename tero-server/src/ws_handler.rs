@@ -49,25 +49,31 @@ pub async fn websocket_handler<'a>(
 
     let ws_dealer = futures_util::TryStreamExt::try_for_each(ws_receiver, |message| {
         //TODO: uniformed logging
-        println!("{:?}", message);
-        let message: WSMessage =
-            serde_json::from_str(message.into_text().unwrap().as_str()).unwrap();
+        let text = message.into_text().unwrap();
+        println!("{:?}", &text);
+        let message: WSMessage = serde_json::from_str(text.as_str()).unwrap();
         match message.message_type {
             WSMessageType::Set => {
                 let key = message.key.unwrap();
                 let store_lock = store.lock();
                 let element_entry = store_lock.get(&key).unwrap();
                 let element = element_entry.deref();
+                let new_data;
                 {
-                    let mut handle = element.deref().data.write();
-                    let new_data = handle.deserialize(message.data.unwrap().as_str());
-                    *handle = new_data;
+                    let handle = element.read();
+                    new_data = handle.data.deserialize(message.data.unwrap().as_str());
+                }
+                {
+                    let mut handle = element.write();
+                    handle.data = new_data;
                 }
                 //TODO: emit events
-                let on_change = element.deref().on_change.read();
-                for each in on_change.deref() {
-                    let handler = each.deref();
-                    handler()
+                {
+                    let handle = element.read();
+                    for each in handle.on_change.deref() {
+                        let handler = each.deref();
+                        handler()
+                    }
                 }
             }
             _ => {

@@ -15,19 +15,21 @@ use crate::{
 
 const CHANNEL_SIZE: usize = 32;
 
-pub struct DataElement {
-    pub data: Arc<RwLock<Box<dyn Synchronizable>>>,
-    pub on_change: Arc<RwLock<Vec<Box<dyn Fn() + Send + Sync>>>>,
+pub struct DataElementInner {
+    pub data: Box<dyn Synchronizable>,
+    pub on_change: Vec<Box<dyn Fn() + Send + Sync>>,
 }
+
+pub type DataElement = Arc<RwLock<DataElementInner>>;
 pub type Store = Arc<Mutex<HashMap<String, DataElement>>>;
 
 pub type BroadcastSender = broadcast::Sender<Message>;
 pub type BroadcastReceiver = broadcast::Receiver<Message>;
 
 pub struct Tero {
-    state: ServerState,
+    state: Mutex<ServerState>,
     addr: SocketAddr,
-    server_handle: Option<JoinHandle<()>>,
+    server_handle: Mutex<Option<JoinHandle<()>>>,
     handler_handles: Arc<Mutex<Vec<JoinHandle<()>>>>,
     store: Store,
     broadcast: (BroadcastSender, BroadcastReceiver),
@@ -41,14 +43,15 @@ pub enum ServerState {
 
 impl Tero {
     pub fn data<T: Synchronizable>(&'static self, key: &str, data: T) -> DataHandle<T> {
-        let guard = self.store.lock();
+        let mut guard = self.store.lock();
         if guard.contains_key(key) {
             panic!("Key {} already exists", key);
         }
-        let data = DataElement {
-            data: Arc::new(RwLock::new(data.clone_synchronizable())),
-            on_change: Arc::new(RwLock::new(Vec::new())),
-        };
+        let data = Arc::new(RwLock::new(DataElementInner {
+            data: data.clone_synchronizable(),
+            on_change: Vec::new(),
+        }));
+        guard.insert(key.to_string(), data.clone());
         let sender = self.broadcast.0.clone();
         DataHandle {
             key: key.to_string(),
@@ -62,9 +65,9 @@ impl Tero {
     pub fn new(addr: impl ToSocketAddrs) -> Tero {
         let channel = broadcast::channel(CHANNEL_SIZE);
         Tero {
-            state: ServerState::Down,
+            state: Mutex::new(ServerState::Down),
             addr: addr.to_socket_addrs().unwrap().next().unwrap(),
-            server_handle: None,
+            server_handle: Mutex::new(None),
             handler_handles: Arc::new(Mutex::new(Vec::new())),
             store: Arc::new(Mutex::new(HashMap::new())),
             broadcast: channel,
@@ -72,10 +75,10 @@ impl Tero {
     }
 
     pub fn get_state(&self) -> ServerState {
-        self.state
+        self.state.lock().clone()
     }
 
-    pub async fn start(&mut self) {
+    pub async fn start(&self) {
         let socket = TcpListener::bind(self.addr).await;
         let listener = socket.expect("Failed to bind addr.");
         let store = self.store.clone();
@@ -94,18 +97,18 @@ impl Tero {
                 handler_handles.lock().push(new_handler);
             }
         });
-        self.server_handle = Some(server_handle);
-        self.state = ServerState::Up;
+        *(self.server_handle.lock()) = Some(server_handle);
+        *(self.state.lock()) = ServerState::Up;
     }
 
-    pub fn stop(&mut self) {
-        if self.state == ServerState::Up {
+    pub fn stop(&self) {
+        if *(self.state.lock()) == ServerState::Up {
             for each in &(*(self.handler_handles.lock())) {
                 each.abort();
             }
-            self.handler_handles = Arc::new(Mutex::new(Vec::new()));
-            self.server_handle.take().unwrap().abort();
-            self.state = ServerState::Down;
+            self.handler_handles.lock().clear();
+            (*(self.server_handle.lock())).take().unwrap().abort();
+            *(self.state.lock()) = ServerState::Down;
         }
     }
 }

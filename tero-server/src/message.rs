@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_repr::*;
 
 use crate::synchronizable::Synchronizable;
 
@@ -10,7 +11,8 @@ pub enum Message {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone)]
+#[repr(u8)]
 pub enum WSMessageType {
     Set = 1,
     Emit = 2,

@@ -27,13 +27,15 @@ where
 
     pub fn set(&self, value: T) {
         {
-            let mut guard = self.data_element.data.write();
-            *guard = value.clone_synchronizable();
+            let mut guard = self.data_element.write();
+            guard.data = value.clone_synchronizable();
         }
-        let on_change = self.data_element.on_change.read();
-        for each in on_change.deref() {
-            let handler = each.deref();
-            handler.execute();
+        {
+            let handle = self.data_element.read();
+            for each in &handle.on_change {
+                let handler = each.deref();
+                handler.execute();
+            }
         }
         let request = Message::Set {
             key: self.key.to_owned(),
@@ -43,8 +45,8 @@ where
     }
 
     pub fn get(&self) -> Box<T> {
-        let guard = self.data_element.data.read();
-        guard.deref().deref().clone_any_box().downcast().unwrap()
+        let guard = self.data_element.read();
+        guard.data.clone_any_box().downcast().unwrap()
     }
 
     pub fn on_change(&'static self, handler: impl Fn(&T) -> () + Send + Sync + 'static) {
@@ -59,7 +61,7 @@ where
             (*handler)(&value);
         };
         let dyn_handler = Box::new(new_handler) as Box<dyn Fn() + Send + Sync>;
-        let mut guard = self.data_element.on_change.write();
-        guard.push(dyn_handler);
+        let mut guard = self.data_element.write();
+        guard.on_change.push(dyn_handler);
     }
 }
