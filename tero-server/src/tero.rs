@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    marker::PhantomData,
     net::{SocketAddr, ToSocketAddrs},
     sync::Arc,
 };
@@ -53,13 +52,7 @@ impl Tero {
         }));
         guard.insert(key.to_string(), data.clone());
         let sender = self.broadcast.0.clone();
-        DataHandle {
-            key: key.to_string(),
-            sender,
-            data_type: PhantomData::<T>,
-            data_element: data,
-            on_change: Arc::new(RwLock::new(Vec::new())),
-        }
+        DataHandle::new(key.to_string(), sender, data)
     }
 
     pub fn new(addr: impl ToSocketAddrs) -> Tero {

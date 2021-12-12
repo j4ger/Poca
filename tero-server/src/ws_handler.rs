@@ -23,6 +23,8 @@ pub async fn websocket_handler<'a>(
         .expect("Failed to accept websocket");
     let (ws_sender, ws_receiver) = futures_util::StreamExt::split(ws_stream);
 
+    //TODO: handshake, but let's skip it until basic frontend is done
+
     let broadcast_stream = BroadcastStream::from(broadcast_rx);
     let broadcast_dealer = futures_util::StreamExt::forward(
         broadcast_stream.filter_map(|message| {

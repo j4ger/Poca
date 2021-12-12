@@ -10,17 +10,27 @@ pub struct DataHandle<T>
 where
     T: Synchronizable,
 {
-    pub key: String,
-    pub sender: broadcast::Sender<Message>,
-    pub data_type: PhantomData<T>,
-    pub data_element: DataElement,
-    pub on_change: Arc<RwLock<Vec<Box<dyn FnMut(&T) + Send + Sync + 'static>>>>,
+    key: String,
+    sender: broadcast::Sender<Message>,
+    data_type: PhantomData<T>,
+    data_element: DataElement,
+    on_change: Arc<RwLock<Vec<Box<dyn FnMut(&T) + Send + Sync + 'static>>>>,
 }
 
 impl<T> DataHandle<T>
 where
     T: Synchronizable,
 {
+    pub fn new(key: String, sender: broadcast::Sender<Message>, data_element: DataElement) -> Self {
+        Self {
+            key,
+            sender,
+            data_type: PhantomData,
+            data_element,
+            on_change: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
     pub fn get_key(&self) -> &str {
         &self.key
     }

@@ -25,6 +25,7 @@ mod tests {
                 test_bool: true
             }
         );
+        static ref HANDLE4: DataHandle<Vec<i32>> = TERO.data("test4", vec![1, 2, 3]);
     }
 
     #[test]
@@ -73,5 +74,14 @@ mod tests {
 
         HANDLE1.set(3);
         assert_eq!(*(watcher.lock().unwrap()), true);
+    }
+
+    #[test]
+    fn on_change_handler_with_inner_set() {
+        let handle5 = TERO.data("test5", true);
+        HANDLE4.on_change(move |_new_value| {
+            handle5.set(false);
+        });
+        HANDLE4.set(vec![4, 5, 6]);
     }
 }
