@@ -1,5 +1,5 @@
 [package]
-name = "tero-client"
+name = "unroll-client"
 version = "0.1.0"
 authors = ["j4ger <xiayuxuan@live.com>"]
 edition = "2018"
@@ -25,7 +25,7 @@ console_error_panic_hook = { version = "0.1.6", optional = true }
 #
 # Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
 wee_alloc = { version = "0.4.5", optional = true }
-tero-server = { path = "../tero-server" }
+unroll-server = { path = "../unroll-server" }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.13"

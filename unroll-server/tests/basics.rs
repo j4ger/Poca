@@ -6,7 +6,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use serde::{Deserialize, Serialize};
-    use tero_server::{DataHandle, Tero};
+    use unroll_server::{DataHandle, Unroll};
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
     struct TestStruct {
@@ -15,17 +15,17 @@ mod tests {
     }
 
     lazy_static! {
-        static ref TERO: Tero = Tero::new("localhost:1120");
-        static ref HANDLE1: DataHandle<i32> = TERO.data("test1", 1);
-        static ref HANDLE2: DataHandle<String> = TERO.data("test2", "test2".to_string());
-        static ref HANDLE3: DataHandle<TestStruct> = TERO.data(
+        static ref UNROLL: Unroll = Unroll::new("localhost:1120");
+        static ref HANDLE1: DataHandle<i32> = UNROLL.data("test1", 1);
+        static ref HANDLE2: DataHandle<String> = UNROLL.data("test2", "test2".to_string());
+        static ref HANDLE3: DataHandle<TestStruct> = UNROLL.data(
             "test3",
             TestStruct {
                 test_field: "test_field".to_string(),
                 test_bool: true
             }
         );
-        static ref HANDLE4: DataHandle<Vec<i32>> = TERO.data("test4", vec![1, 2, 3]);
+        static ref HANDLE4: DataHandle<Vec<i32>> = UNROLL.data("test4", vec![1, 2, 3]);
     }
 
     #[test]
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn on_change_handler_with_inner_set() {
-        let handle5 = TERO.data("test5", true);
+        let handle5 = UNROLL.data("test5", true);
         HANDLE4.on_change(move |_new_value| {
             handle5.set(false);
         });

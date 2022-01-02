@@ -3,11 +3,11 @@
 extern crate lazy_static;
 
 mod tests {
-    use tero_server::{DataHandle, Tero};
+    use unroll_server::{DataHandle, Unroll};
 
     lazy_static! {
-        static ref TERO: Tero = Tero::new("localhost:1120");
-        static ref HANDLE1: DataHandle<i32> = TERO.data("test1", 1);
+        static ref UNROLL: Unroll = Unroll::new("localhost:1120");
+        static ref HANDLE1: DataHandle<i32> = UNROLL.data("test1", 1);
     }
 
     //? not sure if this always works

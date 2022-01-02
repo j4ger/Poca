@@ -25,7 +25,7 @@ pub type Store = Arc<Mutex<HashMap<String, DataElement>>>;
 pub type BroadcastSender = broadcast::Sender<Message>;
 pub type BroadcastReceiver = broadcast::Receiver<Message>;
 
-pub struct Tero {
+pub struct Unroll {
     state: Mutex<ServerState>,
     addr: SocketAddr,
     server_handle: Mutex<Option<JoinHandle<()>>>,
@@ -40,7 +40,7 @@ pub enum ServerState {
     Down,
 }
 
-impl Tero {
+impl Unroll {
     pub fn data<T: Synchronizable>(&'static self, key: &str, data: T) -> DataHandle<T> {
         let mut guard = self.store.lock();
         if guard.contains_key(key) {
@@ -55,9 +55,9 @@ impl Tero {
         DataHandle::new(key.to_string(), sender, data)
     }
 
-    pub fn new(addr: impl ToSocketAddrs) -> Tero {
+    pub fn new(addr: impl ToSocketAddrs) -> Unroll {
         let channel = broadcast::channel(CHANNEL_SIZE);
-        Tero {
+        Unroll {
             state: Mutex::new(ServerState::Down),
             addr: addr.to_socket_addrs().unwrap().next().unwrap(),
             server_handle: Mutex::new(None),
@@ -106,7 +106,7 @@ impl Tero {
     }
 }
 
-impl Drop for Tero {
+impl Drop for Unroll {
     fn drop(&mut self) {
         self.stop();
     }

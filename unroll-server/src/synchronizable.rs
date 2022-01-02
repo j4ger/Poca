@@ -46,7 +46,7 @@ where
     T: 'static + Sync + Send + Debug + Clone + Serialize + DeserializeOwned,
 {
     fn serialize(&self) -> String {
-        //TODO: switch to flexbuffers
+        //TODO: switch to no_proto for ser/de
         serde_json::to_string(self).unwrap()
     }
 

@@ -1,15 +1,15 @@
 #[macro_use]
 extern crate lazy_static;
-use tero_server::{DataHandle, Tero, WSMessage};
+use unroll_server::{DataHandle, Unroll, WSMessage};
 
 lazy_static! {
-    static ref TERO: Tero = Tero::new("localhost:1120");
+    static ref UNROLL: Unroll = Unroll::new("localhost:1120");
 }
 
 #[tokio::main]
 async fn main() {
     let message = WSMessage {
-        message_type: tero_server::WSMessageType::Set,
+        message_type: unroll_server::WSMessageType::Set,
         key: Some("entry1".to_owned()),
         data: Some("43".to_owned()),
     };
@@ -17,9 +17,9 @@ async fn main() {
         "example message: {:?}",
         serde_json::to_string(&message).unwrap()
     );
-    let handle = TERO.data("entry1", 42);
+    let handle = UNROLL.data("entry1", 42);
     println!("Starting websocket server");
-    TERO.start().await;
+    UNROLL.start().await;
 
     tokio::signal::ctrl_c()
         .await
