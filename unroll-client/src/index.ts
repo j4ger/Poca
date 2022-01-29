@@ -27,6 +27,7 @@ export class Unroll {
 
   constructor(readonly addr: string) {
     this.identifier = Symbol();
+    unroll_effect_callbacks[this.identifier] = {};
   }
 
   connect() {
@@ -89,14 +90,15 @@ export class Unroll {
     const that = this;
     const value: T = JSON.parse(await this.get_data(key));
     that.raw[key] = value;
+    unroll_effect_callbacks[that.identifier][key] = [];
     const result = new Proxy(value, {
-      get(target) {
+      get(target, prop) {
         if (unroll_setting_up_effect) {
           unroll_effect_callbacks[that.identifier][key].push(
             unroll_current_callback
           );
         }
-        return () => target;
+        return target[prop as K];
       },
       set(target, prop, value) {
         target[prop as K] = value;
@@ -116,14 +118,16 @@ export class Unroll {
   ): T {
     const that = this;
     that.set_data(key, JSON.stringify(initial_value));
+    that.raw[key] = initial_value;
+    unroll_effect_callbacks[that.identifier][key] = [];
     const result = new Proxy(initial_value, {
-      get(target) {
+      get(target, prop) {
         if (unroll_setting_up_effect) {
           unroll_effect_callbacks[that.identifier][key].push(
             unroll_current_callback
           );
         }
-        return () => target;
+        return target[prop as K];
       },
       set(target, prop, value) {
         target[prop as K] = value;
