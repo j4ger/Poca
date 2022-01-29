@@ -3,7 +3,6 @@ mod event_handler;
 mod message;
 mod serve_app;
 mod synchronizable;
-mod type_gen;
 mod unroll;
 mod ws_handler;
 
