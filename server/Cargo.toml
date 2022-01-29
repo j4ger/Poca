@@ -1,5 +1,5 @@
 [package]
-name = "unroll-server"
+name = "poca-server"
 version = "0.1.0"
 edition = "2021"
 

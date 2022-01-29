@@ -1,15 +1,15 @@
 #[macro_use]
 extern crate lazy_static;
-use unroll_server::{DataHandle, Unroll, WSMessage};
+use poca_server::{DataHandle, Poca, WSMessage};
 
 lazy_static! {
-    static ref UNROLL: Unroll = Unroll::new("localhost:1120");
+    static ref POCA: Poca = Poca::new("localhost:1120");
 }
 
 #[tokio::main]
 async fn main() {
     let message = WSMessage {
-        message_type: unroll_server::WSMessageType::Set,
+        message_type: poca_server::WSMessageType::Set,
         key: Some("entry1".to_owned()),
         data: Some("43".to_owned()),
     };
@@ -17,9 +17,9 @@ async fn main() {
         "example message: {:?}",
         serde_json::to_string(&message).unwrap()
     );
-    let handle = UNROLL.data("entry1", 42);
+    let handle = POCA.data("entry1", 42);
     println!("Starting websocket server");
-    UNROLL.start().await;
+    POCA.start().await;
 
     tokio::signal::ctrl_c()
         .await

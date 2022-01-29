@@ -5,7 +5,7 @@ enum WSMessageType {
   Error = 4,
 }
 
-export enum UnrollState {
+export enum ConnectionState {
   Up,
   Down,
 }
@@ -16,32 +16,32 @@ interface WSMessage {
   data?: string;
 }
 
-export class Unroll {
+export class Poca {
   private identifier!: symbol;
   private ws?: WebSocket;
   private raw: { [key: string]: any } = {};
   private get_queue: {
     [key: string]: ((value: string | PromiseLike<string>) => void)[];
   } = {};
-  state: UnrollState = UnrollState.Down;
+  state: ConnectionState = ConnectionState.Down;
 
   constructor(readonly addr: string) {
     this.identifier = Symbol();
-    unroll_effect_callbacks[this.identifier] = {};
+    effect_callbacks[this.identifier] = {};
   }
 
   connect() {
     this.ws?.close();
     this.ws = new WebSocket(this.addr);
     this.ws.onopen = () => {
-      this.state = UnrollState.Up;
+      this.state = ConnectionState.Up;
       this.ws!.onmessage = this.message_handler;
     };
   }
 
   close() {
     this.ws?.close();
-    this.state = UnrollState.Down;
+    this.state = ConnectionState.Down;
   }
 
   private message_handler(event: MessageEvent<any>) {
@@ -54,8 +54,8 @@ export class Unroll {
         break;
       case WSMessageType.Set:
         this.raw[message.key!] = JSON.parse(message.data!);
-        unroll_effect_callbacks[this.identifier][message.key!]?.forEach(
-          (callback) => callback()
+        effect_callbacks[this.identifier][message.key!]?.forEach((callback) =>
+          callback()
         );
         break;
       default:
@@ -90,20 +90,18 @@ export class Unroll {
     const that = this;
     const value: T = JSON.parse(await this.get_data(key));
     that.raw[key] = value;
-    unroll_effect_callbacks[that.identifier][key] = [];
+    effect_callbacks[that.identifier][key] = [];
     const result = new Proxy(value, {
       get(target, prop) {
-        if (unroll_setting_up_effect) {
-          unroll_effect_callbacks[that.identifier][key].push(
-            unroll_current_callback
-          );
+        if (setting_up_effect) {
+          effect_callbacks[that.identifier][key].push(current_callback);
         }
         return target[prop as K];
       },
       set(target, prop, value) {
         target[prop as K] = value;
         that.set_data(key, JSON.stringify(target));
-        unroll_effect_callbacks[that.identifier][key].forEach((callback) =>
+        effect_callbacks[that.identifier][key].forEach((callback) =>
           callback()
         );
         return true;
@@ -119,20 +117,18 @@ export class Unroll {
     const that = this;
     that.set_data(key, JSON.stringify(initial_value));
     that.raw[key] = initial_value;
-    unroll_effect_callbacks[that.identifier][key] = [];
+    effect_callbacks[that.identifier][key] = [];
     const result = new Proxy(initial_value, {
       get(target, prop) {
-        if (unroll_setting_up_effect) {
-          unroll_effect_callbacks[that.identifier][key].push(
-            unroll_current_callback
-          );
+        if (setting_up_effect) {
+          effect_callbacks[that.identifier][key].push(current_callback);
         }
         return target[prop as K];
       },
       set(target, prop, value) {
         target[prop as K] = value;
         that.set_data(key, JSON.stringify(target));
-        unroll_effect_callbacks[that.identifier][key].forEach((callback) =>
+        effect_callbacks[that.identifier][key].forEach((callback) =>
           callback()
         );
         return true;
@@ -142,16 +138,16 @@ export class Unroll {
   }
 }
 
-let unroll_setting_up_effect = false;
-let unroll_current_callback = () => {};
+let setting_up_effect = false;
+let current_callback = () => {};
 
-let unroll_effect_callbacks: {
+let effect_callbacks: {
   [key: symbol]: { [innerKey: string]: (() => void)[] };
 } = {};
 
-export function unroll_effect(inner: () => void) {
-  unroll_setting_up_effect = true;
-  unroll_current_callback = inner;
+export function effect(inner: () => void) {
+  setting_up_effect = true;
+  current_callback = inner;
   inner();
-  unroll_setting_up_effect = false;
+  setting_up_effect = false;
 }

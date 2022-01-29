@@ -1,7 +1,7 @@
 {
-  "name": "unroll-client",
+  "name": "poca-client",
   "version": "0.1.0",
-  "description": "TS client for Unroll server.",
+  "description": "TS client for Poca server.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/j4ger/Unroll.git"
+    "url": "git+https://github.com/j4ger/Poca.git"
   },
   "keywords": [
     "gui",
@@ -21,9 +21,9 @@
   "author": "j4ger",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/j4ger/Unroll/issues"
+    "url": "https://github.com/j4ger/Poca/issues"
   },
-  "homepage": "https://github.com/j4ger/Unroll#readme",
+  "homepage": "https://github.com/j4ger/Poca#readme",
   "devDependencies": {
     "@types/jest": "^27.4.0",
     "jest": "^27.4.7",

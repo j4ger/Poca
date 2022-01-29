@@ -14,33 +14,33 @@ var WSMessageType;
     WSMessageType[WSMessageType["Get"] = 3] = "Get";
     WSMessageType[WSMessageType["Error"] = 4] = "Error";
 })(WSMessageType || (WSMessageType = {}));
-export var UnrollState;
-(function (UnrollState) {
-    UnrollState[UnrollState["Up"] = 0] = "Up";
-    UnrollState[UnrollState["Down"] = 1] = "Down";
-})(UnrollState || (UnrollState = {}));
-export class Unroll {
+export var ConnectionState;
+(function (ConnectionState) {
+    ConnectionState[ConnectionState["Up"] = 0] = "Up";
+    ConnectionState[ConnectionState["Down"] = 1] = "Down";
+})(ConnectionState || (ConnectionState = {}));
+export class Poca {
     constructor(addr) {
         this.addr = addr;
         this.raw = {};
         this.get_queue = {};
-        this.state = UnrollState.Down;
+        this.state = ConnectionState.Down;
         this.identifier = Symbol();
-        unroll_effect_callbacks[this.identifier] = {};
+        effect_callbacks[this.identifier] = {};
     }
     connect() {
         var _a;
         (_a = this.ws) === null || _a === void 0 ? void 0 : _a.close();
         this.ws = new WebSocket(this.addr);
         this.ws.onopen = () => {
-            this.state = UnrollState.Up;
+            this.state = ConnectionState.Up;
             this.ws.onmessage = this.message_handler;
         };
     }
     close() {
         var _a;
         (_a = this.ws) === null || _a === void 0 ? void 0 : _a.close();
-        this.state = UnrollState.Down;
+        this.state = ConnectionState.Down;
     }
     message_handler(event) {
         var _a, _b;
@@ -53,7 +53,7 @@ export class Unroll {
                 break;
             case WSMessageType.Set:
                 this.raw[message.key] = JSON.parse(message.data);
-                (_b = unroll_effect_callbacks[this.identifier][message.key]) === null || _b === void 0 ? void 0 : _b.forEach((callback) => callback());
+                (_b = effect_callbacks[this.identifier][message.key]) === null || _b === void 0 ? void 0 : _b.forEach((callback) => callback());
                 break;
             default:
                 console.log(message);
@@ -89,18 +89,18 @@ export class Unroll {
             const that = this;
             const value = JSON.parse(yield this.get_data(key));
             that.raw[key] = value;
-            unroll_effect_callbacks[that.identifier][key] = [];
+            effect_callbacks[that.identifier][key] = [];
             const result = new Proxy(value, {
                 get(target, prop) {
-                    if (unroll_setting_up_effect) {
-                        unroll_effect_callbacks[that.identifier][key].push(unroll_current_callback);
+                    if (setting_up_effect) {
+                        effect_callbacks[that.identifier][key].push(current_callback);
                     }
                     return target[prop];
                 },
                 set(target, prop, value) {
                     target[prop] = value;
                     that.set_data(key, JSON.stringify(target));
-                    unroll_effect_callbacks[that.identifier][key].forEach((callback) => callback());
+                    effect_callbacks[that.identifier][key].forEach((callback) => callback());
                     return true;
                 },
             });
@@ -111,30 +111,30 @@ export class Unroll {
         const that = this;
         that.set_data(key, JSON.stringify(initial_value));
         that.raw[key] = initial_value;
-        unroll_effect_callbacks[that.identifier][key] = [];
+        effect_callbacks[that.identifier][key] = [];
         const result = new Proxy(initial_value, {
             get(target, prop) {
-                if (unroll_setting_up_effect) {
-                    unroll_effect_callbacks[that.identifier][key].push(unroll_current_callback);
+                if (setting_up_effect) {
+                    effect_callbacks[that.identifier][key].push(current_callback);
                 }
                 return target[prop];
             },
             set(target, prop, value) {
                 target[prop] = value;
                 that.set_data(key, JSON.stringify(target));
-                unroll_effect_callbacks[that.identifier][key].forEach((callback) => callback());
+                effect_callbacks[that.identifier][key].forEach((callback) => callback());
                 return true;
             },
         });
         return result;
     }
 }
-let unroll_setting_up_effect = false;
-let unroll_current_callback = () => { };
-let unroll_effect_callbacks = {};
-export function unroll_effect(inner) {
-    unroll_setting_up_effect = true;
-    unroll_current_callback = inner;
+let setting_up_effect = false;
+let current_callback = () => { };
+let effect_callbacks = {};
+export function effect(inner) {
+    setting_up_effect = true;
+    current_callback = inner;
     inner();
-    unroll_setting_up_effect = false;
+    setting_up_effect = false;
 }
