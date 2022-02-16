@@ -3,8 +3,6 @@ name = "poca-server"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 dyn-clone = "1.0.4"
 flexbuffers = "2.0.0"
@@ -17,6 +15,7 @@ tokio = { version = "1", features = ["rt", "sync", "macros"] }
 tokio-stream = { version = "0.1.8", features = ["sync"] }
 tokio-tungstenite = "0.16.0"
 tungstenite = "0.16.0"
+warp = "0.3.2"
 
 [dev-dependencies]
 lazy_static = "1.4.0"
