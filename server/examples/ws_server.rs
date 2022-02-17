@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate lazy_static;
-use poca_server::{DataHandle, Poca, WSMessage};
+use poca_server::{DataHandle, Poca, _WSMessage, _WSMessageType};
 
 lazy_static! {
     static ref POCA: Poca = Poca::new("localhost:1120");
@@ -8,8 +8,8 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() {
-    let message = WSMessage {
-        message_type: poca_server::WSMessageType::Set,
+    let message = _WSMessage {
+        message_type: _WSMessageType::Set,
         key: Some("entry1".to_owned()),
         data: Some("43".to_owned()),
     };

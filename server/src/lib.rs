@@ -7,18 +7,17 @@ mod serve_app;
 mod synchronizable;
 mod ws_handler;
 
-pub use app_routes::AppRoutes;
+pub use app_routes::AppRoutes as _AppRoutes;
 pub use data_handle::DataHandle;
-pub use event_handler::EventHandler;
 pub use poca::Poca;
 
 // macro-related functions
-pub use app_routes::generate_app_routes as g_a_r;
-pub use app_routes::AppRoutes as AR;
-pub use app_routes::RouteNode as N;
+pub use app_routes::generate_app_routes as _g_a_r;
+pub use app_routes::AppRoutes as _AR;
+pub use app_routes::RouteNode as _N;
 
 // probably should be in a common module
-pub use message::{WSMessage, WSMessageType};
+pub use message::{WSMessage as _WSMessage, WSMessageType as _WSMessageType};
 
 //TODO: remove unnecessary pubs
 //TODO: use SNAFU for error handling

@@ -38,7 +38,7 @@ pub fn include_app_dir(item: proc_macro::TokenStream) -> proc_macro::TokenStream
     let span = Span::call_site();
 
     quote_spanned! {span=>
-        poca_server::g_a_r(#routes)
+        poca_server::_g_a_r(#routes)
     }
     .into()
 }
@@ -52,7 +52,7 @@ fn process_file(path: PathBuf) -> TokenStream {
     let path = path.to_string_lossy().to_string();
 
     quote! {
-        poca_server::N::E(#file_name,include_bytes!(#path))
+        poca_server::_N::E(#file_name,include_bytes!(#path))
     }
 }
 
@@ -92,6 +92,6 @@ fn process_directory(path: PathBuf, default_file_name: &Vec<&str>) -> TokenStrea
     }
 
     quote! {
-        poca_server::N::S(#file_name,#default_content,Box::new(vec![#(#result),*]))
+        poca_server::_N::S(#file_name,#default_content,Box::new(vec![#(#result),*]))
     }
 }

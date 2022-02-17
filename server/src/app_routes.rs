@@ -23,3 +23,9 @@ pub fn generate_app_routes(routes: RouteNode) -> AppRoutes {
         routes: sub_routes.into_iter().map(generate_app_routes).collect(),
     }
 }
+
+impl<'a> AppRoutes<'a> {
+    pub fn get_route(&self, path: Vec<&str>) -> Option<&'a [u8]> {
+        unimplemented!()
+    }
+}
