@@ -13,7 +13,9 @@ pub use event_handler::EventHandler;
 pub use poca::Poca;
 
 // macro-related functions
-pub use app_routes::{generate_app_routes, traverse_directory};
+pub use app_routes::generate_app_routes as g_a_r;
+pub use app_routes::AppRoutes as AR;
+pub use app_routes::RouteNode as N;
 
 // probably should be in a common module
 pub use message::{WSMessage, WSMessageType};
