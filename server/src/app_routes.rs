@@ -25,7 +25,13 @@ pub fn generate_app_routes(routes: RouteNode) -> AppRoutes {
 }
 
 impl<'a> AppRoutes<'a> {
-    pub fn get_route(&self, path: Vec<&str>) -> Option<&'a [u8]> {
-        unimplemented!()
+    pub fn get_route(&self, path: &[&str]) -> Option<&'a [u8]> {
+        if path.len() == 0 {
+            return None;
+        }
+        if path[0] == "" || path[0] == self.root {
+            return Some(self.content);
+        }
+        return self.routes.iter().find_map(|route| route.get_route(path));
     }
 }

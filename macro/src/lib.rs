@@ -1,4 +1,5 @@
 use std::{
+    env,
     fs::read_dir,
     path::{Path, PathBuf},
 };
@@ -13,7 +14,8 @@ pub fn include_app_dir(item: proc_macro::TokenStream) -> proc_macro::TokenStream
 
     let dir_input = input.get(0).expect("No path provided").trim_matches('\"');
     let path = Path::new(&dir_input);
-    let project_root = env!("CARGO_MANIFEST_DIR");
+    let project_root = env::var("CARGO_MANIFEST_DIR")
+        .expect("Failed to resolve CARGO_MANIFEST_DIR environment variable");
     let full_path = Path::new(&project_root).join(&path);
 
     let default_file_name = match input.len() {

@@ -3,7 +3,6 @@ mod data_handle;
 mod event_handler;
 mod message;
 mod poca;
-mod serve_app;
 mod synchronizable;
 mod ws_handler;
 

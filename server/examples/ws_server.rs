@@ -1,23 +1,16 @@
 #[macro_use]
 extern crate lazy_static;
-use poca_server::{DataHandle, Poca, _WSMessage, _WSMessageType};
+
+use poca_macro::include_app_dir;
+use poca_server::Poca;
 
 lazy_static! {
-    static ref POCA: Poca = Poca::new("localhost:1120");
+    static ref POCA: Poca = Poca::new("localhost:1120", include_app_dir!("examples/resources/"));
 }
 
 #[tokio::main]
 async fn main() {
-    let message = _WSMessage {
-        message_type: _WSMessageType::Set,
-        key: Some("entry1".to_owned()),
-        data: Some("43".to_owned()),
-    };
-    println!(
-        "example message: {:?}",
-        serde_json::to_string(&message).unwrap()
-    );
-    let handle = POCA.data("entry1", 42);
+    let _handle = POCA.data("entry1", 42);
     println!("Starting websocket server");
     POCA.start().await;
 

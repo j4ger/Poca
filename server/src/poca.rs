@@ -5,11 +5,15 @@ use std::{
 };
 
 use parking_lot::{Mutex, RwLock};
-use tokio::{net::TcpListener, sync::broadcast, task::JoinHandle};
+use tokio::{
+    sync::{broadcast, oneshot},
+    task::JoinHandle,
+};
+use warp::{path::FullPath, Filter};
 
 use crate::{
-    data_handle::DataHandle, message::Message, synchronizable::Synchronizable,
-    ws_handler::websocket_handler,
+    app_routes::AppRoutes, data_handle::DataHandle, message::Message,
+    synchronizable::Synchronizable, ws_handler::websocket_handler,
 };
 
 const CHANNEL_SIZE: usize = 32;
@@ -27,11 +31,12 @@ pub type BroadcastReceiver = broadcast::Receiver<Message>;
 
 pub struct Poca {
     state: Mutex<ServerState>,
-    addr: SocketAddr,
-    server_handle: Mutex<Option<JoinHandle<()>>>,
-    handler_handles: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    address: SocketAddr,
+    shutdown: Mutex<Option<oneshot::Sender<()>>>,
     store: Store,
     broadcast: (BroadcastSender, BroadcastReceiver),
+    server: Mutex<Option<JoinHandle<()>>>,
+    app_routes: AppRoutes<'static>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -55,15 +60,16 @@ impl Poca {
         DataHandle::new(key.to_string(), sender, data)
     }
 
-    pub fn new(addr: impl ToSocketAddrs) -> Poca {
+    pub fn new(address: impl ToSocketAddrs, app_routes: AppRoutes<'static>) -> Poca {
         let channel = broadcast::channel(CHANNEL_SIZE);
         Poca {
             state: Mutex::new(ServerState::Down),
-            addr: addr.to_socket_addrs().unwrap().next().unwrap(),
-            server_handle: Mutex::new(None),
-            handler_handles: Arc::new(Mutex::new(Vec::new())),
+            address: address.to_socket_addrs().unwrap().next().unwrap(),
+            shutdown: Mutex::new(None),
             store: Arc::new(Mutex::new(HashMap::new())),
             broadcast: channel,
+            server: Mutex::new(None),
+            app_routes,
         }
     }
 
@@ -71,36 +77,48 @@ impl Poca {
         self.state.lock().clone()
     }
 
-    pub async fn start(&self) {
-        let socket = TcpListener::bind(self.addr).await;
-        let listener = socket.expect("Failed to bind addr.");
-        let store = self.store.clone();
-        let handler_handles = self.handler_handles.clone();
-        let broadcast_sender = self.broadcast.0.clone();
-        let server_handle = tokio::spawn(async move {
-            while let Ok((stream, addr)) = listener.accept().await {
-                let store_clone = store.clone();
-                let broadcast_receiver = broadcast_sender.subscribe();
-                let new_handler = tokio::spawn(websocket_handler(
-                    stream,
-                    addr,
-                    store_clone,
-                    broadcast_receiver,
-                ));
-                handler_handles.lock().push(new_handler);
-            }
-        });
-        *(self.server_handle.lock()) = Some(server_handle);
+    pub async fn start(&'static self) {
+        let (shutdown_sender, shutdown_receiver) = oneshot::channel();
+
+        let routes = warp::get().and(
+            warp::any()
+                .and(warp::ws().map(|websocket: warp::ws::Ws| {
+                    let store = self.store.clone();
+                    let broadcast_receiver = self.broadcast.0.subscribe();
+                    websocket.on_upgrade(|websocket| {
+                        websocket_handler(websocket, store, broadcast_receiver)
+                    })
+                }))
+                .or(warp::any()
+                    .and(warp::path::full())
+                    .map(move |path: FullPath| {
+                        let path = path
+                            .as_str()
+                            .trim_start_matches('/')
+                            .split("/")
+                            .collect::<Vec<&str>>();
+                        warp::reply::html(self.app_routes.get_route(&path).unwrap_or(&[]))
+                    })),
+        );
+
+        let address = self.address.clone();
+
+        *(self.server.lock()) = Some(tokio::spawn(async move {
+            let (_, server) = warp::serve(routes).bind_with_graceful_shutdown(address, async {
+                shutdown_receiver.await.ok();
+            });
+            server.await;
+        }));
+
+        *(self.shutdown.lock()) = Some(shutdown_sender);
         *(self.state.lock()) = ServerState::Up;
     }
 
     pub fn stop(&self) {
         if *(self.state.lock()) == ServerState::Up {
-            for each in &(*(self.handler_handles.lock())) {
-                each.abort();
+            if let Some(sender) = self.shutdown.lock().take() {
+                sender.send(());
             }
-            self.handler_handles.lock().clear();
-            (*(self.server_handle.lock())).take().unwrap().abort();
             *(self.state.lock()) = ServerState::Down;
         }
     }

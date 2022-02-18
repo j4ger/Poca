@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 use std::ops::Deref;
 
 use futures_util::pin_mut;
-use tokio::net::TcpStream;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+use warp::ws::{self, WebSocket};
 
 use crate::{
     message::{Message, WSMessage, WSMessageType},
@@ -11,17 +11,11 @@ use crate::{
 };
 
 pub async fn websocket_handler<'a>(
-    raw_stream: TcpStream,
-    addr: SocketAddr,
+    websocket: WebSocket,
     store: Store,
     broadcast_rx: BroadcastReceiver,
 ) {
-    println!("New connection from {}", addr);
-
-    let ws_stream = tokio_tungstenite::accept_async(raw_stream)
-        .await
-        .expect("Failed to accept websocket");
-    let (ws_sender, ws_receiver) = futures_util::StreamExt::split(ws_stream);
+    let (ws_sender, ws_receiver) = futures_util::StreamExt::split(websocket);
 
     //TODO: handshake, but let's skip it until basic frontend is done
 
@@ -30,7 +24,7 @@ pub async fn websocket_handler<'a>(
         broadcast_stream.filter_map(|message| {
             match message {
                 Ok(inner) => match inner {
-                    Message::Set { key, data } => Some(Ok(tungstenite::Message::Text(
+                    Message::Set { key, data } => Some(Ok(ws::Message::text(
                         serde_json::to_string(&WSMessage {
                             message_type: WSMessageType::Set,
                             key: Some(key.to_string()),
@@ -51,9 +45,10 @@ pub async fn websocket_handler<'a>(
 
     let ws_dealer = futures_util::TryStreamExt::try_for_each(ws_receiver, |message| {
         //TODO: uniformed logging
-        let text = message.into_text().unwrap();
+        //TODO: use bytes instead of string
+        let text = message.to_str().unwrap();
         println!("{:?}", &text);
-        let message: WSMessage = serde_json::from_str(text.as_str()).unwrap();
+        let message: WSMessage = serde_json::from_str(text).unwrap();
         match message.message_type {
             WSMessageType::Set => {
                 let key = message.key.unwrap();
