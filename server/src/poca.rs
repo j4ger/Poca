@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Debug,
     net::{SocketAddr, ToSocketAddrs},
     sync::Arc,
 };
@@ -21,6 +22,12 @@ const CHANNEL_SIZE: usize = 32;
 pub struct DataElementInner {
     pub data: Box<dyn Synchronizable>,
     pub on_change: Vec<Box<dyn Fn() + Send + Sync>>,
+}
+
+impl Debug for DataElementInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DataElementInner")
+    }
 }
 
 pub type DataElement = Arc<RwLock<DataElementInner>>;
@@ -85,8 +92,9 @@ impl Poca {
                 .and(warp::ws().map(|websocket: warp::ws::Ws| {
                     let store = self.store.clone();
                     let broadcast_receiver = self.broadcast.0.subscribe();
+                    let broadcast_sender = self.broadcast.0.clone();
                     websocket.on_upgrade(|websocket| {
-                        websocket_handler(websocket, store, broadcast_receiver)
+                        websocket_handler(websocket, store, broadcast_receiver, broadcast_sender)
                     })
                 }))
                 .or(warp::any()
@@ -97,7 +105,34 @@ impl Poca {
                             .trim_start_matches('/')
                             .split("/")
                             .collect::<Vec<&str>>();
-                        warp::reply::html(self.app_routes.get_route(&path).unwrap_or(&[]))
+                        let content_type = match path.last() {
+                            Some(filename) => match filename.split('.').last() {
+                                Some(extension) => match extension {
+                                    "html" | "htm" => "text/html",
+                                    "css" => "text/css",
+                                    "js" => "text/javascript",
+                                    "png" => "image/png",
+                                    "jpg" | "jpeg" => "image/jpeg",
+                                    "gif" => "image/gif",
+                                    "svg" => "image/svg+xml",
+                                    "ico" => "image/x-icon",
+                                    "json" => "application/json",
+                                    "pdf" => "application/pdf",
+                                    "zip" => "application/zip",
+                                    "mp3" => "audio/mpeg",
+                                    "mp4" | "m4a" => "video/mp4",
+                                    "ogg" => "audio/ogg",
+                                    "ogv" => "video/ogg",
+                                    "webm" => "video/webm",
+                                    _ => "text/html",
+                                },
+
+                                None => "text/html",
+                            },
+                            None => "text/html",
+                        };
+                        let content = self.app_routes.get_route(&path, true).unwrap_or(&[]);
+                        warp::reply::with_header(content, "content-type", content_type)
                     })),
         );
 
@@ -117,7 +152,7 @@ impl Poca {
     pub fn stop(&self) {
         if *(self.state.lock()) == ServerState::Up {
             if let Some(sender) = self.shutdown.lock().take() {
-                sender.send(());
+                sender.send(()).ok();
             }
             *(self.state.lock()) = ServerState::Down;
         }

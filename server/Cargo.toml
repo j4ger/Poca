@@ -1,5 +1,5 @@
 [package]
-name = "poca-server"
+name = "poca"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,11 +12,10 @@ serde_json = "1.0.71"
 serde_repr = "0.1.7"
 tokio = { version = "1", features = ["rt", "sync", "macros"] }
 tokio-stream = { version = "0.1.8", features = ["sync"] }
-tokio-tungstenite = "0.16.0"
 tungstenite = "0.16.0"
 warp = "0.3.2"
+poca-macro = { path = "../macro" }
 
 [dev-dependencies]
 lazy_static = "1.4.0"
 tokio = { version = "1", features = ["full"] }
-poca-macro = { path = "../macro" }

@@ -8,18 +8,18 @@ use tokio::sync::broadcast;
 
 pub struct DataHandle<T>
 where
-    T: Synchronizable,
+    T: Synchronizable + 'static,
 {
     key: String,
     sender: broadcast::Sender<Message>,
     data_type: PhantomData<T>,
     data_element: DataElement,
-    on_change: Arc<RwLock<Vec<Box<dyn FnMut(&T) + Send + Sync + 'static>>>>,
+    on_change: Arc<RwLock<Vec<Box<dyn FnMut(T) + Send + Sync + 'static>>>>,
 }
 
 impl<T> DataHandle<T>
 where
-    T: Synchronizable,
+    T: Synchronizable + 'static,
 {
     pub fn new(key: String, sender: broadcast::Sender<Message>, data_element: DataElement) -> Self {
         Self {
@@ -59,7 +59,7 @@ where
         guard.data.clone_any_box().downcast().unwrap()
     }
 
-    pub fn on_change(&'static self, handler: impl Fn(&T) -> () + Send + Sync + 'static) {
+    pub fn on_change(&'static self, handler: impl Fn(T) -> () + Send + Sync + 'static) {
         let boxed_handler = Box::new(handler);
         let mut lock = self.on_change.write();
         let current_index = lock.len();
@@ -68,7 +68,7 @@ where
             let mut guard = self.on_change.write();
             let handler = guard.get_mut(current_index).unwrap();
             let value = self.get();
-            (*handler)(&value);
+            (*handler)(*value);
         };
         let dyn_handler = Box::new(new_handler) as Box<dyn Fn() + Send + Sync>;
         let mut guard = self.data_element.write();

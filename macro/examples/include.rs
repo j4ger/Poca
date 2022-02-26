@@ -1,4 +1,4 @@
-use poca_macro::include_app_dir;
+use poca_server::include_app_dir;
 
 fn main() {
     // note for myself:

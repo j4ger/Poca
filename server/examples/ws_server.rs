@@ -1,8 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
-use poca_macro::include_app_dir;
-use poca_server::Poca;
+use poca::{include_app_dir, Poca};
 
 lazy_static! {
     static ref POCA: Poca = Poca::new("localhost:1120", include_app_dir!("examples/resources/"));

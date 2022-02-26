@@ -3,10 +3,11 @@
 extern crate lazy_static;
 
 mod tests {
-    use poca_server::{DataHandle, Poca};
+    use poca::{include_app_dir, DataHandle, Poca};
 
     lazy_static! {
-        static ref POCA: Poca = Poca::new("localhost:1120");
+        static ref POCA: Poca =
+            Poca::new("localhost:1120", include_app_dir!("tests/empty_assets/"));
         static ref HANDLE1: DataHandle<i32> = POCA.data("test1", 1);
     }
 

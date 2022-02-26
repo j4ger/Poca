@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::ops::Deref;
 
 use futures_util::pin_mut;
@@ -7,19 +6,20 @@ use warp::ws::{self, WebSocket};
 
 use crate::{
     message::{Message, WSMessage, WSMessageType},
-    poca::{BroadcastReceiver, Store},
+    poca::{BroadcastReceiver, BroadcastSender, Store},
 };
 
 pub async fn websocket_handler<'a>(
     websocket: WebSocket,
     store: Store,
-    broadcast_rx: BroadcastReceiver,
+    broadcast_receiver: BroadcastReceiver,
+    broadcast_sender: BroadcastSender,
 ) {
     let (ws_sender, ws_receiver) = futures_util::StreamExt::split(websocket);
 
     //TODO: handshake, but let's skip it until basic frontend is done
 
-    let broadcast_stream = BroadcastStream::from(broadcast_rx);
+    let broadcast_stream = BroadcastStream::from(broadcast_receiver);
     let broadcast_dealer = futures_util::StreamExt::forward(
         broadcast_stream.filter_map(|message| {
             match message {
@@ -27,6 +27,14 @@ pub async fn websocket_handler<'a>(
                     Message::Set { key, data } => Some(Ok(ws::Message::text(
                         serde_json::to_string(&WSMessage {
                             message_type: WSMessageType::Set,
+                            key: Some(key.to_string()),
+                            data: Some(data.serialize()),
+                        })
+                        .unwrap(),
+                    ))),
+                    Message::Get { key, data } => Some(Ok(ws::Message::text(
+                        serde_json::to_string(&WSMessage {
+                            message_type: WSMessageType::Get,
                             key: Some(key.to_string()),
                             data: Some(data.serialize()),
                         })
@@ -47,7 +55,7 @@ pub async fn websocket_handler<'a>(
         //TODO: uniformed logging
         //TODO: use bytes instead of string
         let text = message.to_str().unwrap();
-        println!("{:?}", &text);
+        println!("Got Websocket message: {:?}", &text);
         let message: WSMessage = serde_json::from_str(text).unwrap();
         match message.message_type {
             WSMessageType::Set => {
@@ -72,6 +80,23 @@ pub async fn websocket_handler<'a>(
                         handler()
                     }
                 }
+            }
+            WSMessageType::Get => {
+                let key = message.key.unwrap();
+                let data;
+                {
+                    let store_lock = store.lock();
+                    let element_entry = store_lock.get(&key).unwrap();
+                    let element = element_entry.deref();
+                    let handle = element.read();
+                    data = handle.data.serialize();
+                }
+                broadcast_sender
+                    .send(Message::Get {
+                        key,
+                        data: Box::new(data),
+                    })
+                    .ok();
             }
             _ => {
                 todo!("handle other message types")

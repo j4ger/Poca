@@ -9,6 +9,11 @@ pub enum Message {
         key: String,
         data: Box<dyn Synchronizable>,
     },
+    Get {
+        //TODO: use client-id to only reply to the client that requested the data
+        key: String,
+        data: Box<dyn Synchronizable>,
+    },
 }
 
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone)]

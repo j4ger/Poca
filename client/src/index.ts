@@ -11,7 +11,7 @@ export enum ConnectionState {
 }
 
 interface WSMessage {
-  messageType: WSMessageType;
+  message_type: WSMessageType;
   key?: string;
   data?: string;
 }
@@ -20,6 +20,7 @@ export class Poca {
   private identifier!: symbol;
   private ws?: WebSocket;
   private raw: { [key: string]: any } = {};
+  private work_pool: string[] = [];
   private get_queue: {
     [key: string]: ((value: string | PromiseLike<string>) => void)[];
   } = {};
@@ -30,13 +31,44 @@ export class Poca {
     effect_callbacks[this.identifier] = {};
   }
 
-  connect() {
-    this.ws?.close();
-    this.ws = new WebSocket(this.addr);
-    this.ws.onopen = () => {
-      this.state = ConnectionState.Up;
-      this.ws!.onmessage = this.message_handler;
-    };
+  async connect(): Promise<void> {
+    let that = this;
+    new Promise((resolve) => {
+      that.ws?.close();
+      that.ws = new WebSocket("ws://" + this.addr);
+      that.ws.onopen = () => {
+        that.state = ConnectionState.Up;
+        that.ws!.onmessage = (event: MessageEvent<any>) => {
+          const message: WSMessage = JSON.parse(event.data);
+          switch (message.message_type) {
+            case WSMessageType.Get:
+              if (this.get_queue[message.key!].length > 0) {
+                this.get_queue[message.key!].shift()?.(message.data!);
+              }
+              break;
+            case WSMessageType.Set:
+              this.raw[message.key!] = JSON.parse(message.data!);
+              //only call callbacks if values are different
+              //or should I
+              effect_callbacks[this.identifier][message.key!]?.forEach(
+                (callback) => callback()
+              );
+              break;
+            default:
+              console.log(message);
+          }
+        };
+        that.work_pool.forEach((key) => {
+          let message: WSMessage = {
+            message_type: WSMessageType.Get,
+            key,
+          };
+          that.ws!.send(JSON.stringify(message));
+        });
+        that.work_pool = [];
+        resolve(undefined);
+      };
+    });
   }
 
   close() {
@@ -44,34 +76,19 @@ export class Poca {
     this.state = ConnectionState.Down;
   }
 
-  private message_handler(event: MessageEvent<any>) {
-    const message: WSMessage = JSON.parse(event.data);
-    switch (message.messageType) {
-      case WSMessageType.Get:
-        if (this.get_queue[message.key!].length > 0) {
-          this.get_queue[message.key!].shift()?.(message.data!);
-        }
-        break;
-      case WSMessageType.Set:
-        this.raw[message.key!] = JSON.parse(message.data!);
-        effect_callbacks[this.identifier][message.key!]?.forEach((callback) =>
-          callback()
-        );
-        break;
-      default:
-        console.log(message);
-    }
-  }
-
   private async get_data(key: string): Promise<string> {
     const message: WSMessage = {
-      messageType: WSMessageType.Get,
+      message_type: WSMessageType.Get,
       key,
     };
 
-    this.ws?.send(JSON.stringify(message));
+    if (this.state == ConnectionState.Up) {
+      this.ws?.send(JSON.stringify(message));
+    } else {
+      this.work_pool.push(key);
+    }
 
-    return new Promise<string>((resolve, _reject) => {
+    return new Promise((resolve) => {
       this.get_queue[key] = this.get_queue[key] || [];
       this.get_queue[key].push(resolve);
     });
@@ -79,7 +96,7 @@ export class Poca {
 
   private async set_data(key: string, value: string) {
     const message: WSMessage = {
-      messageType: WSMessageType.Set,
+      message_type: WSMessageType.Set,
       key,
       data: value,
     };
@@ -88,26 +105,29 @@ export class Poca {
 
   async reactive<T extends Object, K extends keyof T>(key: string): Promise<T> {
     const that = this;
-    const value: T = JSON.parse(await this.get_data(key));
-    that.raw[key] = value;
-    effect_callbacks[that.identifier][key] = [];
-    const result = new Proxy(value, {
-      get(target, prop) {
-        if (setting_up_effect) {
-          effect_callbacks[that.identifier][key].push(current_callback);
-        }
-        return target[prop as K];
-      },
-      set(target, prop, value) {
-        target[prop as K] = value;
-        that.set_data(key, JSON.stringify(target));
-        effect_callbacks[that.identifier][key].forEach((callback) =>
-          callback()
-        );
-        return true;
-      },
+    const data = await this.get_data(key);
+    const value: T = JSON.parse(JSON.parse(data));
+    return new Promise((resolve) => {
+      that.raw[key] = value;
+      effect_callbacks[that.identifier][key] = [];
+      const result = new Proxy(value, {
+        get(_target, prop) {
+          if (setting_up_effect) {
+            effect_callbacks[that.identifier][key].push(current_callback);
+          }
+          return that.raw[key][prop as K];
+        },
+        set(target, prop, value) {
+          target[prop as K] = value;
+          that.set_data(key, JSON.stringify(target));
+          effect_callbacks[that.identifier][key].forEach((callback) =>
+            callback()
+          );
+          return true;
+        },
+      });
+      resolve(result);
     });
-    return result;
   }
 
   reactive_with_default<T extends Object, K extends keyof T>(

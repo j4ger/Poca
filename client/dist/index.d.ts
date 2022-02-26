@@ -7,12 +7,12 @@ export declare class Poca {
     private identifier;
     private ws?;
     private raw;
+    private work_pool;
     private get_queue;
     state: ConnectionState;
     constructor(addr: string);
-    connect(): void;
+    connect(): Promise<void>;
     close(): void;
-    private message_handler;
     private get_data;
     private set_data;
     reactive<T extends Object, K extends keyof T>(key: string): Promise<T>;

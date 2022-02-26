@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Guessing Game</title>
+  </head>
+  <body>
+    <div id="app-root">
+      <div class="flex items-center py-6 flex-col">
+        <h1 class="font-mono font-bold text-2xl">My Guessing Game</h1>
+        <p>Make a guess!</p>
+        <p>Hint: the target is an integer between 0 and 100.</p>
+        <input
+          type="text"
+          id="input"
+          class="mt-4 rounded-md border-amber-800 border-2"
+        />
+        <div class="mt-4 h-10 w-80 bg-cyan-300">
+          <div class="grid place-items-center">
+            <p id="result"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

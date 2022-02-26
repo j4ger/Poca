@@ -23,51 +23,72 @@ export class Poca {
     constructor(addr) {
         this.addr = addr;
         this.raw = {};
+        this.work_pool = [];
         this.get_queue = {};
         this.state = ConnectionState.Down;
         this.identifier = Symbol();
         effect_callbacks[this.identifier] = {};
     }
     connect() {
-        var _a;
-        (_a = this.ws) === null || _a === void 0 ? void 0 : _a.close();
-        this.ws = new WebSocket(this.addr);
-        this.ws.onopen = () => {
-            this.state = ConnectionState.Up;
-            this.ws.onmessage = this.message_handler;
-        };
+        return __awaiter(this, void 0, void 0, function* () {
+            let that = this;
+            new Promise((resolve) => {
+                var _a;
+                (_a = that.ws) === null || _a === void 0 ? void 0 : _a.close();
+                that.ws = new WebSocket("ws://" + this.addr);
+                that.ws.onopen = () => {
+                    that.state = ConnectionState.Up;
+                    that.ws.onmessage = (event) => {
+                        var _a, _b;
+                        const message = JSON.parse(event.data);
+                        switch (message.message_type) {
+                            case WSMessageType.Get:
+                                if (this.get_queue[message.key].length > 0) {
+                                    (_a = this.get_queue[message.key].shift()) === null || _a === void 0 ? void 0 : _a(message.data);
+                                }
+                                break;
+                            case WSMessageType.Set:
+                                this.raw[message.key] = JSON.parse(message.data);
+                                //only call callbacks if values are different
+                                //or should I
+                                (_b = effect_callbacks[this.identifier][message.key]) === null || _b === void 0 ? void 0 : _b.forEach((callback) => callback());
+                                break;
+                            default:
+                                console.log(message);
+                        }
+                    };
+                    that.work_pool.forEach((key) => {
+                        let message = {
+                            message_type: WSMessageType.Get,
+                            key,
+                        };
+                        that.ws.send(JSON.stringify(message));
+                    });
+                    that.work_pool = [];
+                    resolve(undefined);
+                };
+            });
+        });
     }
     close() {
         var _a;
         (_a = this.ws) === null || _a === void 0 ? void 0 : _a.close();
         this.state = ConnectionState.Down;
     }
-    message_handler(event) {
-        var _a, _b;
-        const message = JSON.parse(event.data);
-        switch (message.messageType) {
-            case WSMessageType.Get:
-                if (this.get_queue[message.key].length > 0) {
-                    (_a = this.get_queue[message.key].shift()) === null || _a === void 0 ? void 0 : _a(message.data);
-                }
-                break;
-            case WSMessageType.Set:
-                this.raw[message.key] = JSON.parse(message.data);
-                (_b = effect_callbacks[this.identifier][message.key]) === null || _b === void 0 ? void 0 : _b.forEach((callback) => callback());
-                break;
-            default:
-                console.log(message);
-        }
-    }
     get_data(key) {
         var _a;
         return __awaiter(this, void 0, void 0, function* () {
             const message = {
-                messageType: WSMessageType.Get,
+                message_type: WSMessageType.Get,
                 key,
             };
-            (_a = this.ws) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify(message));
-            return new Promise((resolve, _reject) => {
+            if (this.state == ConnectionState.Up) {
+                (_a = this.ws) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify(message));
+            }
+            else {
+                this.work_pool.push(key);
+            }
+            return new Promise((resolve) => {
                 this.get_queue[key] = this.get_queue[key] || [];
                 this.get_queue[key].push(resolve);
             });
@@ -77,7 +98,7 @@ export class Poca {
         var _a;
         return __awaiter(this, void 0, void 0, function* () {
             const message = {
-                messageType: WSMessageType.Set,
+                message_type: WSMessageType.Set,
                 key,
                 data: value,
             };
@@ -87,24 +108,27 @@ export class Poca {
     reactive(key) {
         return __awaiter(this, void 0, void 0, function* () {
             const that = this;
-            const value = JSON.parse(yield this.get_data(key));
-            that.raw[key] = value;
-            effect_callbacks[that.identifier][key] = [];
-            const result = new Proxy(value, {
-                get(target, prop) {
-                    if (setting_up_effect) {
-                        effect_callbacks[that.identifier][key].push(current_callback);
-                    }
-                    return target[prop];
-                },
-                set(target, prop, value) {
-                    target[prop] = value;
-                    that.set_data(key, JSON.stringify(target));
-                    effect_callbacks[that.identifier][key].forEach((callback) => callback());
-                    return true;
-                },
+            const data = yield this.get_data(key);
+            const value = JSON.parse(JSON.parse(data));
+            return new Promise((resolve) => {
+                that.raw[key] = value;
+                effect_callbacks[that.identifier][key] = [];
+                const result = new Proxy(value, {
+                    get(_target, prop) {
+                        if (setting_up_effect) {
+                            effect_callbacks[that.identifier][key].push(current_callback);
+                        }
+                        return that.raw[key][prop];
+                    },
+                    set(target, prop, value) {
+                        target[prop] = value;
+                        that.set_data(key, JSON.stringify(target));
+                        effect_callbacks[that.identifier][key].forEach((callback) => callback());
+                        return true;
+                    },
+                });
+                resolve(result);
             });
-            return result;
         });
     }
     reactive_with_default(key, initial_value) {

@@ -5,7 +5,7 @@ extern crate lazy_static;
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use poca_server::{DataHandle, Poca};
+    use poca::{include_app_dir, DataHandle, Poca};
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -15,7 +15,8 @@ mod tests {
     }
 
     lazy_static! {
-        static ref POCA: Poca = Poca::new("localhost:1120");
+        static ref POCA: Poca =
+            Poca::new("localhost:1120", include_app_dir!("tests/empty_assets/"));
         static ref HANDLE1: DataHandle<i32> = POCA.data("test1", 1);
         static ref HANDLE2: DataHandle<String> = POCA.data("test2", "test2".to_string());
         static ref HANDLE3: DataHandle<TestStruct> = POCA.data(
