@@ -1,5 +1,7 @@
 use crate::{
-    event_handler::EventHandler, message::Message, poca::DataElement,
+    event_handler::{EventHandler, EventHandlerFn},
+    message::Message,
+    poca::DataElement,
     synchronizable::Synchronizable,
 };
 use parking_lot::RwLock;
@@ -14,7 +16,7 @@ where
     sender: broadcast::Sender<Message>,
     data_type: PhantomData<T>,
     data_element: DataElement,
-    on_change: Arc<RwLock<Vec<Box<dyn FnMut(T) + Send + Sync + 'static>>>>,
+    on_change: EventHandlerFn<T>,
 }
 
 impl<T> DataHandle<T>
@@ -59,7 +61,7 @@ where
         guard.data.clone_any_box().downcast().unwrap()
     }
 
-    pub fn on_change(&'static self, handler: impl Fn(T) -> () + Send + Sync + 'static) {
+    pub fn on_change(&'static self, handler: impl Fn(T) + Send + Sync + 'static) {
         let boxed_handler = Box::new(handler);
         let mut lock = self.on_change.write();
         let current_index = lock.len();

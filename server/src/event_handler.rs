@@ -1,9 +1,15 @@
+use std::sync::Arc;
+
+use parking_lot::RwLock;
+
+pub type EventHandlerFn<T> = Arc<RwLock<Vec<Box<dyn FnMut(T) + Send + Sync + 'static>>>>;
+
 pub trait EventHandler: Send + Sync + 'static {
     fn execute(&self);
 }
 
 impl EventHandler for dyn Fn() + Send + Sync {
-    fn execute(&self) -> () {
+    fn execute(&self) {
         self()
     }
 }

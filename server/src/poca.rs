@@ -81,8 +81,10 @@ impl Poca {
     }
 
     pub fn get_state(&self) -> ServerState {
-        self.state.lock().clone()
+        *self.state.lock()
     }
+
+    pub fn show(&self) {}
 
     pub async fn start(&'static self) {
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();
@@ -103,7 +105,7 @@ impl Poca {
                         let path = path
                             .as_str()
                             .trim_start_matches('/')
-                            .split("/")
+                            .split('/')
                             .collect::<Vec<&str>>();
                         let content_type = match path.last() {
                             Some(filename) => match filename.split('.').last() {
@@ -136,7 +138,7 @@ impl Poca {
                     })),
         );
 
-        let address = self.address.clone();
+        let address = self.address;
 
         *(self.server.lock()) = Some(tokio::spawn(async move {
             let (_, server) = warp::serve(routes).bind_with_graceful_shutdown(address, async {

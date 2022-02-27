@@ -27,7 +27,7 @@ pub async fn websocket_handler<'a>(
                     Message::Set { key, data } => Some(Ok(ws::Message::text(
                         serde_json::to_string(&WSMessage {
                             message_type: WSMessageType::Set,
-                            key: Some(key.to_string()),
+                            key: Some(key),
                             data: Some(data.serialize()),
                         })
                         .unwrap(),
@@ -35,7 +35,7 @@ pub async fn websocket_handler<'a>(
                     Message::Get { key, data } => Some(Ok(ws::Message::text(
                         serde_json::to_string(&WSMessage {
                             message_type: WSMessageType::Get,
-                            key: Some(key.to_string()),
+                            key: Some(key),
                             data: Some(data.serialize()),
                         })
                         .unwrap(),
