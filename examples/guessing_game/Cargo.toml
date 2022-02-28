@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-poca-server = { path="../../server" }
+poca= { path="../../server" }
 tokio = { version = "1", features = ["full"]}
 rand = "0.8.5"
 ts2rs ={ version= "0.2.2", features = ["serde"]}

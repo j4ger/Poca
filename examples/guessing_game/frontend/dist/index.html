@@ -1,31 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon.17e50649.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Guessing Game</title>
-    <script type="module" crossorigin src="/assets/index.b3079204.js"></script>
-    <link rel="stylesheet" href="/assets/index.605156a0.css">
-  </head>
-  <body>
-    <div id="app-root">
-      <div class="flex items-center py-6 flex-col">
-        <h1 class="font-mono font-bold text-2xl">My Guessing Game</h1>
-        <p>Make a guess!</p>
-        <p>Hint: the target is an integer between 0 and 100.</p>
-        <input
-          type="text"
-          id="input"
-          class="mt-4 rounded-md border-amber-800 border-2"
-        />
-        <div class="mt-4 h-10 w-80 bg-cyan-300">
-          <div class="grid place-items-center">
-            <p id="result"></p>
-          </div>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.17e50649.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Guessing Game</title>
+  <script type="module" crossorigin src="/assets/index.8a5b77dc.js"></script>
+  <link rel="stylesheet" href="/assets/index.f8351c81.css">
+</head>
+
+<body>
+  <div id="app-root">
+    <div class="flex flex-col items-center py-6">
+      <h1 class="font-mono text-2xl font-bold">My Guessing Game</h1>
+      <p>Make a guess!</p>
+      <p>Hint: the target is an integer between 0 and 100.</p>
+      <input type="text" id="input" class="mt-4 border-2 rounded-md border-amber-800" />
+      <div class="h-10 mt-4 w-80 bg-cyan-300">
+        <div class="grid place-items-center">
+          <p id="result"></p>
+        </div>
+      </div>
+      <div class="mt-4 bg-red-200" id="close">
+        <div class="grid place-items-center">
+          <p>Close</p>
         </div>
       </div>
     </div>
-    
-  </body>
+  </div>
+  
+</body>
+
 </html>

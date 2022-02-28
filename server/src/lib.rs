@@ -8,7 +8,7 @@ mod ws_handler;
 
 pub use app_routes::AppRoutes as _AppRoutes;
 pub use data_handle::DataHandle;
-pub use poca::Poca;
+pub use poca::{Poca, WindowOptions};
 
 // macro-related functions
 // should not be documented

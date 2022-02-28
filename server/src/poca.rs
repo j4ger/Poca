@@ -11,6 +11,7 @@ use tokio::{
     task::JoinHandle,
 };
 use warp::{path::FullPath, Filter};
+use web_view::Handle;
 
 use crate::{
     app_routes::AppRoutes, data_handle::DataHandle, message::Message,
@@ -44,6 +45,35 @@ pub struct Poca {
     broadcast: (BroadcastSender, BroadcastReceiver),
     server: Mutex<Option<JoinHandle<()>>>,
     app_routes: AppRoutes<'static>,
+    window_options: WindowOptions,
+    //@TODO: support multiple windows
+    window_handler: Mutex<Option<Handle<()>>>,
+}
+
+pub struct WindowOptions {
+    title: String,
+    size: (u32, u32),
+    resizable: bool,
+}
+
+impl Default for WindowOptions {
+    fn default() -> WindowOptions {
+        WindowOptions {
+            title: "Poca App".to_string(),
+            size: (640, 480),
+            resizable: false,
+        }
+    }
+}
+
+impl WindowOptions {
+    pub fn new(title: &str, size: (u32, u32), resizable: bool) -> Self {
+        WindowOptions {
+            title: title.to_string(),
+            size,
+            resizable,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -67,7 +97,11 @@ impl Poca {
         DataHandle::new(key.to_string(), sender, data)
     }
 
-    pub fn new(address: impl ToSocketAddrs, app_routes: AppRoutes<'static>) -> Poca {
+    pub fn new(
+        address: impl ToSocketAddrs,
+        app_routes: AppRoutes<'static>,
+        window_options: impl Into<Option<WindowOptions>>,
+    ) -> Poca {
         let channel = broadcast::channel(CHANNEL_SIZE);
         Poca {
             state: Mutex::new(ServerState::Down),
@@ -77,6 +111,8 @@ impl Poca {
             broadcast: channel,
             server: Mutex::new(None),
             app_routes,
+            window_options: window_options.into().unwrap_or(WindowOptions::default()),
+            window_handler: Mutex::new(None),
         }
     }
 
@@ -84,7 +120,35 @@ impl Poca {
         *self.state.lock()
     }
 
-    pub fn show(&self) {}
+    //@TODO: choose if the program should end when window is closed
+    pub fn show_window(&self) {
+        if self.window_handler.lock().is_none() {
+            let window = web_view::builder()
+                .title(self.window_options.title.as_str())
+                .content(web_view::Content::Url(format!("http://{}/", self.address)))
+                .size(
+                    self.window_options.size.0 as i32,
+                    self.window_options.size.1 as i32,
+                )
+                .resizable(self.window_options.resizable)
+                .debug(false)
+                .user_data(())
+                .invoke_handler(|_webview, _argument| Ok(()))
+                .build()
+                .expect("Failed to build Webview window");
+            let handle = window.handle();
+            *(self.window_handler.lock()) = Some(handle);
+            window.run().ok();
+        } else {
+            panic!("Window already shown")
+        }
+    }
+
+    pub fn kill_window(&self) {
+        if let Some(handle) = self.window_handler.lock().take() {
+            handle.dispatch(|webview| Ok(webview.exit())).ok();
+        }
+    }
 
     pub async fn start(&'static self) {
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();
@@ -153,8 +217,9 @@ impl Poca {
 
     pub fn stop(&self) {
         if *(self.state.lock()) == ServerState::Up {
+            self.kill_window();
             if let Some(sender) = self.shutdown.lock().take() {
-                sender.send(()).ok();
+                let _ = sender.send(());
             }
             *(self.state.lock()) = ServerState::Down;
         }

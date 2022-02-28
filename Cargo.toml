@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+  "macro",
+  "server",
+  "examples/guessing_game"
+]

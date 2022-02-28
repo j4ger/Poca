@@ -1,18 +1,24 @@
 import "./style.css";
 
-import { Poca, effect } from "../../../../client/dist/index";
-import { Guess, Answer } from "./interface";
+import {Poca, effect} from "../../../../client/dist/index";
+import {Guess, Answer, Interactions} from "./interface";
 
 const POCA = new Poca("localhost:2341");
 await POCA.connect();
 
 const GUESS: Guess = await POCA.reactive("guess");
 const ANSWER: Answer = await POCA.reactive("answer");
+const INTERACTIONS: Interactions = await POCA.reactive("interactions");
 
 const input_field = document.querySelector("#input") as HTMLInputElement;
 input_field.addEventListener("input", () => {
   GUESS.guess = input_field.value;
 });
+
+const close_button = document.querySelector("#close") as HTMLElement;
+close_button.addEventListener("click", () => {
+  INTERACTIONS.close = true;
+})
 
 effect(() => {
   const result_field = document.querySelector("#result") as HTMLElement;

@@ -4,7 +4,11 @@ extern crate lazy_static;
 use poca::{include_app_dir, Poca};
 
 lazy_static! {
-    static ref POCA: Poca = Poca::new("localhost:1120", include_app_dir!("examples/resources/"));
+    static ref POCA: Poca = Poca::new(
+        "localhost:1120",
+        include_app_dir!("examples/resources/"),
+        None
+    );
 }
 
 #[tokio::main]

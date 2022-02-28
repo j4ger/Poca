@@ -55,7 +55,7 @@ export class Poca {
               );
               break;
             default:
-              console.log(message);
+              console.log("Unimplemented message: " + message);
           }
         };
         that.work_pool.forEach((key) => {
