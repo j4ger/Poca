@@ -14,8 +14,8 @@ use warp::{path::FullPath, Filter};
 use web_view::Handle;
 
 use crate::{
-    app_routes::AppRoutes, data_handle::DataHandle, message::Message,
-    synchronizable::Synchronizable, ws_handler::websocket_handler,
+    app_routes::AppRoutes, data_handle::DataHandle, event_handler::EventHandlerStore,
+    message::Message, synchronizable::Synchronizable, ws_handler::websocket_handler,
 };
 
 const CHANNEL_SIZE: usize = 32;
@@ -42,6 +42,7 @@ pub struct Poca {
     address: SocketAddr,
     shutdown: Mutex<Option<oneshot::Sender<()>>>,
     store: Store,
+    event_handler_store: EventHandlerStore,
     broadcast: (BroadcastSender, BroadcastReceiver),
     server: Mutex<Option<JoinHandle<()>>>,
     app_routes: AppRoutes<'static>,
@@ -83,6 +84,26 @@ pub enum ServerState {
 }
 
 impl Poca {
+    pub fn new(
+        address: impl ToSocketAddrs,
+        app_routes: AppRoutes<'static>,
+        window_options: impl Into<Option<WindowOptions>>,
+    ) -> Poca {
+        let channel = broadcast::channel(CHANNEL_SIZE);
+        Poca {
+            state: Mutex::new(ServerState::Down),
+            address: address.to_socket_addrs().unwrap().next().unwrap(),
+            shutdown: Mutex::new(None),
+            store: Arc::new(Mutex::new(HashMap::new())),
+            event_handler_store: Arc::new(RwLock::new(HashMap::new())),
+            broadcast: channel,
+            server: Mutex::new(None),
+            app_routes,
+            window_options: window_options.into().unwrap_or(WindowOptions::default()),
+            window_handler: Mutex::new(None),
+        }
+    }
+
     pub fn data<T: Synchronizable>(&'static self, key: &str, data: T) -> DataHandle<T> {
         let mut guard = self.store.lock();
         if guard.contains_key(key) {
@@ -97,22 +118,15 @@ impl Poca {
         DataHandle::new(key.to_string(), sender, data)
     }
 
-    pub fn new(
-        address: impl ToSocketAddrs,
-        app_routes: AppRoutes<'static>,
-        window_options: impl Into<Option<WindowOptions>>,
-    ) -> Poca {
-        let channel = broadcast::channel(CHANNEL_SIZE);
-        Poca {
-            state: Mutex::new(ServerState::Down),
-            address: address.to_socket_addrs().unwrap().next().unwrap(),
-            shutdown: Mutex::new(None),
-            store: Arc::new(Mutex::new(HashMap::new())),
-            broadcast: channel,
-            server: Mutex::new(None),
-            app_routes,
-            window_options: window_options.into().unwrap_or(WindowOptions::default()),
-            window_handler: Mutex::new(None),
+    pub fn event(&self, key: &str, handler: impl Fn() + Send + Sync + 'static) {
+        let mut lock = self.event_handler_store.write();
+        match lock.get_mut(key) {
+            Some(list) => {
+                list.push(Box::new(handler));
+            }
+            None => {
+                lock.insert(key.to_string(), vec![Box::new(handler)]);
+            }
         }
     }
 
@@ -157,10 +171,17 @@ impl Poca {
             warp::any()
                 .and(warp::ws().map(|websocket: warp::ws::Ws| {
                     let store = self.store.clone();
+                    let event_handler_store = self.event_handler_store.clone();
                     let broadcast_receiver = self.broadcast.0.subscribe();
                     let broadcast_sender = self.broadcast.0.clone();
                     websocket.on_upgrade(|websocket| {
-                        websocket_handler(websocket, store, broadcast_receiver, broadcast_sender)
+                        websocket_handler(
+                            websocket,
+                            store,
+                            event_handler_store,
+                            broadcast_receiver,
+                            broadcast_sender,
+                        )
                     })
                 }))
                 .or(warp::any()

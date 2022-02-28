@@ -5,6 +5,7 @@ use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use warp::ws::{self, WebSocket};
 
 use crate::{
+    event_handler::EventHandlerStore,
     message::{Message, WSMessage, WSMessageType},
     poca::{BroadcastReceiver, BroadcastSender, Store},
 };
@@ -12,6 +13,7 @@ use crate::{
 pub async fn websocket_handler<'a>(
     websocket: WebSocket,
     store: Store,
+    event_handler_store: EventHandlerStore,
     broadcast_receiver: BroadcastReceiver,
     broadcast_sender: BroadcastSender,
 ) {
@@ -86,7 +88,9 @@ pub async fn websocket_handler<'a>(
                 let data;
                 {
                     let store_lock = store.lock();
-                    let element_entry = store_lock.get(&key).unwrap();
+                    let element_entry = store_lock
+                        .get(&key)
+                        .expect(format!("Element with key {} cannot be found", key).as_str());
                     let element = element_entry.deref();
                     let handle = element.read();
                     data = handle.data.serialize();
@@ -97,6 +101,16 @@ pub async fn websocket_handler<'a>(
                         data: Box::new(data),
                     })
                     .ok();
+            }
+            WSMessageType::Emit => {
+                let key = message.key.unwrap();
+                let lock = event_handler_store.read();
+                let handlers = lock
+                    .get(&key)
+                    .expect(format!("Event handler with key {} cannot be found", key).as_str());
+                for handler in handlers {
+                    handler();
+                }
             }
             _ => {
                 todo!("handle other message types")

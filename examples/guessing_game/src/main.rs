@@ -5,7 +5,6 @@ lazy_static::lazy_static! {
     static ref POCA: Poca = Poca::new("localhost:2341", include_app_dir!("frontend/dist/"),WindowOptions::new("My Guessing Game",(600,600),false));
     static ref GUESS: DataHandle<Guess> = POCA.data("guess", Guess{ guess:"101".to_string()});
     static ref ANSWER: DataHandle<Answer> = POCA.data("answer", Answer { answer: "Input something!".to_string()});
-    static ref INTERACTIONS : DataHandle<Interactions> = POCA.data("interactions", Interactions{close:false});
 }
 
 use ts2rs::import;
@@ -38,7 +37,7 @@ async fn main() {
             });
         }
     });
-    INTERACTIONS.on_change(|_new| POCA.stop());
+    POCA.event("close", || POCA.stop());
     POCA.start().await;
     POCA.show_window();
 }

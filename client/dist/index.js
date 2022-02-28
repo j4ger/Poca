@@ -54,7 +54,7 @@ export class Poca {
                                 (_b = effect_callbacks[this.identifier][message.key]) === null || _b === void 0 ? void 0 : _b.forEach((callback) => callback());
                                 break;
                             default:
-                                console.log(message);
+                                console.log("Unimplemented message: " + message);
                         }
                     };
                     that.work_pool.forEach((key) => {
@@ -151,6 +151,14 @@ export class Poca {
             },
         });
         return result;
+    }
+    emit(key) {
+        var _a;
+        const message = {
+            message_type: WSMessageType.Emit,
+            key
+        };
+        (_a = this.ws) === null || _a === void 0 ? void 0 : _a.send(JSON.stringify(message));
     }
 }
 let setting_up_effect = false;

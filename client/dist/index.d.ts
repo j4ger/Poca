@@ -17,5 +17,6 @@ export declare class Poca {
     private set_data;
     reactive<T extends Object, K extends keyof T>(key: string): Promise<T>;
     reactive_with_default<T extends Object, K extends keyof T>(key: string, initial_value: T): T;
+    emit(key: string): void;
 }
 export declare function effect(inner: () => void): void;

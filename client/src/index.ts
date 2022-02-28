@@ -19,7 +19,7 @@ interface WSMessage {
 export class Poca {
   private identifier!: symbol;
   private ws?: WebSocket;
-  private raw: { [key: string]: any } = {};
+  private raw: {[key: string]: any} = {};
   private work_pool: string[] = [];
   private get_queue: {
     [key: string]: ((value: string | PromiseLike<string>) => void)[];
@@ -156,13 +156,21 @@ export class Poca {
     });
     return result;
   }
+
+  emit(key: string) {
+    const message: WSMessage = {
+      message_type: WSMessageType.Emit,
+      key
+    };
+    this.ws?.send(JSON.stringify(message));
+  }
 }
 
 let setting_up_effect = false;
 let current_callback = () => {};
 
 let effect_callbacks: {
-  [key: symbol]: { [innerKey: string]: (() => void)[] };
+  [key: symbol]: {[innerKey: string]: (() => void)[]};
 } = {};
 
 export function effect(inner: () => void) {

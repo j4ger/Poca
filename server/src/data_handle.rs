@@ -1,5 +1,5 @@
 use crate::{
-    event_handler::{EventHandler, EventHandlerFn},
+    event_handler::{EventHandler, OnChangeEventHandlerStore},
     message::Message,
     poca::DataElement,
     synchronizable::Synchronizable,
@@ -16,7 +16,7 @@ where
     sender: broadcast::Sender<Message>,
     data_type: PhantomData<T>,
     data_element: DataElement,
-    on_change: EventHandlerFn<T>,
+    on_change: OnChangeEventHandlerStore<T>,
 }
 
 impl<T> DataHandle<T>
